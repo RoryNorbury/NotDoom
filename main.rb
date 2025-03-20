@@ -35,7 +35,7 @@ class MyGame < Gosu::Window
         recalculate_render_variables()
 
         # list of vertex pairs for walls
-        @walls = [[Vector[1.0, 1.0, 1.0], Vector[2.0, 1.0, 1.0]]]
+        @walls = [[Vector[1.0, 1.0, 1.0], Vector[2.0, 1.0, 1.0], Vector[2.0, 0.0, 1.0], Vector[1.0, 0.0, 1.0]]]
     end
 
     # overriden Gosu::Window function
@@ -54,12 +54,14 @@ class MyGame < Gosu::Window
     # draw walls to screen
     def draw_walls(wall_vertices)
         wall_vertices.each do |wall|
+            get_screen_coordinates(wall[0])
             Gosu.draw_triangle(20, 20, Gosu::Color::RED, 100, 200, Gosu::Color::GREEN, 200, 100, Gosu::Color::BLUE)
         end                
     end
     
     # determine the screen coordinates that a point translates to
     def get_screen_coordinates(point)
+        puts("Point: " + point.to_s())
         point -= player.position
 
         intersect_point = get_intersect_point(point, @screen_plane)
@@ -68,18 +70,27 @@ class MyGame < Gosu::Window
         end
 
         # rotate intersect point back into screen space
-        intersect_point = @reverse_rotation_matrix * intersect_point
+        intersect_point = (intersect_point.to_matrix().transpose() * @reverse_rotation_matrix ).row_vectors()[0]
+        puts("intersect point: " + intersect_point.to_s())
 
 
+        # return nil if point is outside screen
+        if (intersect_point[0] < -0.5) or (intersect_point[0] > 0.5) or (intersect_point[1] < -0.5) or (intersect_point[1] > 0.5)
+            return nil
+        end
 
-
-        point += player.position
+        # transform into screen coordinates
+        screen_coordinates = intersect_point[0, 2] + Vector[0.5, 0.5]
+        puts(screen_coordinates)
+        return nil
     end
 
     def recalculate_render_variables
         @rotation_matrix = get_rotation_matrix(player.view_angle)
         @reverse_rotation_matrix = get_rotation_matrix(-player.view_angle)
-        @view_vector = @rotation_matrix * @initial_view_vector
+        # this is actually fucked please please please use C or python next time
+        @view_vector = (@initial_view_vector.to_matrix().transpose() * @rotation_matrix).row_vectors()[0]
+        puts("View vector: " + @view_vector.to_s())
         @screen_plane = Plane.new(@view_vector, @view_vector)
     end
 
@@ -106,11 +117,11 @@ class MyGame < Gosu::Window
             return nil
         end
         # shouldn't ever happen; means screen and view ray are parallel
-        if p_dot_n == 0
+        if p0_dot_n == 0
             raise "screen and view ray are parallel"
         end
-        d = p_dot_n / l_dot_n  
-        return d
+        d = p0_dot_n / l_dot_n  
+        return d * gradient
     end
 
 
