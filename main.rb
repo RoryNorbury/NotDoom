@@ -2,6 +2,7 @@ require 'gosu'
 require "matrix"
 
 PI = Math::PI
+RESOLUTION = [640, 640]
 
 class Plane
     attr_accessor :normal, :point
@@ -23,10 +24,12 @@ end
 class MyGame < Gosu::Window
     attr_reader :player, :walls
     def initialize
-        super(640, 360)
+        
+        super(*RESOLUTION)
         self.caption = "Not Doom"
 
         @player = Player.new()
+        @player.position -= Vector[0, 0, 1]
 
         # variables for screen coordinate calculation
         @initial_view_vector = Vector[0.0, 0.0, 1.0]
@@ -54,7 +57,10 @@ class MyGame < Gosu::Window
     # draw walls to screen
     def draw_walls(wall_vertices)
         wall_vertices.each do |wall|
-            get_screen_coordinates(wall[0])
+            screen_coordinates = Array.new(4, Vector.zero(2))
+            # if the point maps to a position on the screen
+            if get_screen_coordinates(wall[0]) != nil
+            end
             Gosu.draw_triangle(20, 20, Gosu::Color::RED, 100, 200, Gosu::Color::GREEN, 200, 100, Gosu::Color::BLUE)
         end                
     end
@@ -66,23 +72,24 @@ class MyGame < Gosu::Window
 
         intersect_point = get_intersect_point(point, @screen_plane)
         if intersect_point == nil
+            
             return nil
         end
 
         # rotate intersect point back into screen space
         intersect_point = (intersect_point.to_matrix().transpose() * @reverse_rotation_matrix ).row_vectors()[0]
-        puts("intersect point: " + intersect_point.to_s())
+        puts("Intersect point: " + intersect_point.to_s())
 
 
-        # return nil if point is outside screen
+        # return nil if point is outside screen <-- actually please don't do this
         if (intersect_point[0] < -0.5) or (intersect_point[0] > 0.5) or (intersect_point[1] < -0.5) or (intersect_point[1] > 0.5)
             return nil
         end
 
         # transform into screen coordinates
-        screen_coordinates = intersect_point[0, 2] + Vector[0.5, 0.5]
-        puts(screen_coordinates)
-        return nil
+        a = Vector[intersect_point[0], intersect_point[1]]
+        screen_coordinates = a + Vector[0.5, 0.5]
+        puts("Screen coordinates: " + screen_coordinates.to_s())
     end
 
     def recalculate_render_variables
