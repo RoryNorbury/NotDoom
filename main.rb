@@ -3,6 +3,8 @@ require "matrix"
 
 PI = Math::PI
 RESOLUTION = [640, 640]
+CAMERA_PAN_SPEED = PI/4 / 60
+PLAYER_MOVEMENT_SPEED = 1.0 / 60
 
 class Plane
     attr_accessor :normal, :point
@@ -17,8 +19,7 @@ class Player
         @position = Vector.zero(3)
         @view_angle = 0
     end
-    attr_accessor :position
-    attr_accessor :view_angle
+    attr_accessor :position, :view_angle
 end
 
 class MyGame < Gosu::Window
@@ -30,21 +31,57 @@ class MyGame < Gosu::Window
 
         @player = Player.new()
         @player.position -= Vector[0, 0, 1]
-
+        
         # variables for screen coordinate calculation
         @initial_view_vector = Vector[0.0, 0.0, 1.0]
         @screen_edges = [Vector[-0.5, 0.5, 1], Vector[0.5, -0.5, 1]]
+
+        # variable initialisation because screw interpreters
+        @rotation_matrix = Matrix
+        @reverse_rotation_matrix = Matrix
+        @view_vector = Vector
+        @right_vector = Vector
+        @up_vector = Vector[0, 1, 0]
+        @screen_plane = Plane
+
         # should be recalculated every frame
         recalculate_render_variables()
 
         # list of vertex pairs for walls
         @walls = [[Vector[1.0, 1.0, 1.0], Vector[2.0, 1.0, 1.0], Vector[2.0, 0.0, 1.0], Vector[1.0, 0.0, 1.0]]]
     end
-
+    
     # overriden Gosu::Window function
     # frame-by-frame logic goes here
     def update
-        player.position -= Vector[0, 0, 0.2] / 60.0
+        # keyboard input handling
+        if Gosu.button_down?(Gosu::KB_LEFT)
+            player.view_angle += CAMERA_PAN_SPEED
+        end
+        if Gosu.button_down?(Gosu::KB_RIGHT)
+            player.view_angle -= CAMERA_PAN_SPEED
+        end
+        if Gosu.button_down?(Gosu::KB_W)
+            player.position += @view_vector * PLAYER_MOVEMENT_SPEED
+        end
+        if Gosu.button_down?(Gosu::KB_S)
+            player.position -= @view_vector * PLAYER_MOVEMENT_SPEED
+        end
+        if Gosu.button_down?(Gosu::KB_A)
+            player.position -= @right_vector * PLAYER_MOVEMENT_SPEED
+        end
+        if Gosu.button_down?(Gosu::KB_D)
+            player.position += @right_vector * PLAYER_MOVEMENT_SPEED
+        end
+        if Gosu.button_down?(Gosu::KB_SPACE)
+            player.position += @up_vector * PLAYER_MOVEMENT_SPEED
+        end
+        if Gosu.button_down?(Gosu::KB_LEFT_CONTROL)
+            player.position -= @up_vector * PLAYER_MOVEMENT_SPEED
+        end
+        if Gosu.button_down?(Gosu::KB_ESCAPE)
+            close()
+        end
     end
   
     # overriden Gosu::Window function
@@ -59,37 +96,41 @@ class MyGame < Gosu::Window
         wall_vertices.each do |wall|
             screen_coordinates = Array.new(4, Vector.zero(2))
             # if the point maps to a position on the screen
-            if get_screen_coordinates(wall[0]) != nil
+            for i in 0..3
+                screen_coordinates[i] = get_screen_coordinates(wall[i])
+                if screen_coordinates[i] == nil
+                    return
+                end
+                screen_coordinates[i] *= RESOLUTION[0] # TODO: allow non-square screen - use aspect ratio
             end
-            Gosu.draw_triangle(20, 20, Gosu::Color::RED, 100, 200, Gosu::Color::GREEN, 200, 100, Gosu::Color::BLUE)
-        end                
+            # puts("Screen coordinates: " + screen_coordinates.to_s())
+            Gosu.draw_quad(
+                screen_coordinates[0][0], screen_coordinates[0][1], Gosu::Color::RED,
+                screen_coordinates[1][0], screen_coordinates[1][1], Gosu::Color::GREEN,
+                screen_coordinates[2][0], screen_coordinates[2][1], Gosu::Color::BLUE,
+                screen_coordinates[3][0], screen_coordinates[3][1], Gosu::Color::WHITE
+                )
+        end
     end
     
     # determine the screen coordinates that a point translates to
     def get_screen_coordinates(point)
-        puts("Point: " + point.to_s())
+        # puts("Point: " + point.to_s())
         point -= player.position
 
         intersect_point = get_intersect_point(point, @screen_plane)
         if intersect_point == nil
-            
             return nil
         end
 
         # rotate intersect point back into screen space
         intersect_point = (intersect_point.to_matrix().transpose() * @reverse_rotation_matrix ).row_vectors()[0]
-        puts("Intersect point: " + intersect_point.to_s())
-
-
-        # return nil if point is outside screen <-- actually please don't do this
-        if (intersect_point[0] < -0.5) or (intersect_point[0] > 0.5) or (intersect_point[1] < -0.5) or (intersect_point[1] > 0.5)
-            return nil
-        end
+        # puts("Intersect point: " + intersect_point.to_s())
 
         # transform into screen coordinates
-        a = Vector[intersect_point[0], intersect_point[1]]
+        a = Vector[intersect_point[0], -intersect_point[1]] # y axis flipped
         screen_coordinates = a + Vector[0.5, 0.5]
-        puts("Screen coordinates: " + screen_coordinates.to_s())
+        # puts("Screen coordinates: " + screen_coordinates.to_s())
     end
 
     def recalculate_render_variables
@@ -97,7 +138,7 @@ class MyGame < Gosu::Window
         @reverse_rotation_matrix = get_rotation_matrix(-player.view_angle)
         # this is actually fucked please please please use C or python next time
         @view_vector = (@initial_view_vector.to_matrix().transpose() * @rotation_matrix).row_vectors()[0]
-        puts("View vector: " + @view_vector.to_s())
+        @right_vector = @view_vector.cross(Vector[0, -1, 0]) # left handed i think
         @screen_plane = Plane.new(@view_vector, @view_vector)
     end
 
@@ -120,12 +161,13 @@ class MyGame < Gosu::Window
         end
         p0_dot_n = plane.point.dot(plane.normal)
         l_dot_n = gradient.dot(plane.normal)
-        if l_dot_n == 0
-            return nil
-        end
         # shouldn't ever happen; means screen and view ray are parallel
-        if p0_dot_n == 0
+        if l_dot_n == 0
             raise "screen and view ray are parallel"
+        end
+        # why?
+        if p0_dot_n == 0
+            return nil
         end
         d = p0_dot_n / l_dot_n  
         return d * gradient
