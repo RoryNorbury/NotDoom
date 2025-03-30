@@ -48,7 +48,7 @@ class MyGame < Gosu::Window
         recalculate_render_variables()
 
         # list of vertex pairs for walls
-        @walls = [[Vector[1.0, 1.0, 1.0], Vector[2.0, 1.0, 1.0], Vector[2.0, 0.0, 1.0], Vector[1.0, 0.0, 1.0]]]
+        @walls = [[Vector[1.0, 1.0, 2.0], Vector[2.0, 1.0, 2.0], Vector[2.0, 0.0, 2.0], Vector[1.0, 0.0, 2.0]]]
     end
     
     # overriden Gosu::Window function
