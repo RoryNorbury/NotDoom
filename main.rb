@@ -5,6 +5,8 @@ PI = Math::PI
 RESOLUTION = [640, 640]
 CAMERA_PAN_SPEED = PI/4 / 60
 PLAYER_MOVEMENT_SPEED = 1.0 / 60
+MAX_RENDER_DISTANCE = 128
+MIN_RENDER_DISTANCE = 1
 
 class Plane
     attr_accessor :normal, :point
@@ -48,7 +50,12 @@ class MyGame < Gosu::Window
         recalculate_render_variables()
 
         # list of vertex pairs for walls
-        @walls = [[Vector[1.0, 1.0, 2.0], Vector[2.0, 1.0, 2.0], Vector[2.0, 0.0, 2.0], Vector[1.0, 0.0, 2.0]]]
+        @walls = [
+            [Vector[1.0, 1.0, 2.0], Vector[2.0, 1.0, 2.0], Vector[2.0, 0.0, 2.0], Vector[1.0, 0.0, 2.0]],
+            [Vector[0.0, 1.0, 2.0], Vector[1.0, 1.0, 2.0], Vector[1.0, 0.0, 2.0], Vector[0.0, 0.0, 2.0]],
+            [Vector[0.5, 1.0, 1.5], Vector[1.5, 1.0, 2.0], Vector[1.5, 0.0, 2.0], Vector[0.5, 0.0, 1.5]],
+            [Vector[0.5, 1.0, 2.0], Vector[1.5, 1.0, 2.5], Vector[1.5, 0.0, 2.5], Vector[0.5, 0.0, 2.0]]
+        ]
     end
     
     # overriden Gosu::Window function
@@ -96,19 +103,24 @@ class MyGame < Gosu::Window
         wall_vertices.each do |wall|
             screen_coordinates = Array.new(4, Vector.zero(2))
             # if the point maps to a position on the screen
+            z = 0
             for i in 0..3
                 screen_coordinates[i] = get_screen_coordinates(wall[i])
                 if screen_coordinates[i] == nil
                     return
                 end
                 screen_coordinates[i] *= RESOLUTION[0] # TODO: allow non-square screen - use aspect ratio
+                z += screen_coordinates[i][2]
             end
+            z /= 4.0
+            z = 1-z
             # puts("Screen coordinates: " + screen_coordinates.to_s())
             Gosu.draw_quad(
-                screen_coordinates[0][0], screen_coordinates[0][1], Gosu::Color::RED,
-                screen_coordinates[1][0], screen_coordinates[1][1], Gosu::Color::GREEN,
+                screen_coordinates[0][0], screen_coordinates[0][1], Gosu::Color::BLUE,
+                screen_coordinates[1][0], screen_coordinates[1][1], Gosu::Color::BLUE,
                 screen_coordinates[2][0], screen_coordinates[2][1], Gosu::Color::BLUE,
-                screen_coordinates[3][0], screen_coordinates[3][1], Gosu::Color::WHITE
+                screen_coordinates[3][0], screen_coordinates[3][1], Gosu::Color::BLUE,
+                z
                 )
         end
     end
@@ -123,14 +135,21 @@ class MyGame < Gosu::Window
             return nil
         end
 
+        # calculate distance to camera
+        distance = point.magnitude()
+        # map between 0 and 1
+        z = (distance - MIN_RENDER_DISTANCE) / (MAX_RENDER_DISTANCE - MIN_RENDER_DISTANCE)
+
         # rotate intersect point back into screen space
         intersect_point = (intersect_point.to_matrix().transpose() * @reverse_rotation_matrix ).row_vectors()[0]
         # puts("Intersect point: " + intersect_point.to_s())
 
-        # transform into screen coordinates
-        a = Vector[intersect_point[0], -intersect_point[1]] # y axis flipped
-        screen_coordinates = a + Vector[0.5, 0.5]
+        # transform into screen coordinates (becomes depth)
+        a = Vector[intersect_point[0], -intersect_point[1], z] # y axis flipped
+        screen_coordinates = a + Vector[0.5, 0.5, 0.0]
         # puts("Screen coordinates: " + screen_coordinates.to_s())
+        # if z < 0 r z > 1 coordinate is outside viewing frustrum
+        return screen_coordinates
     end
 
     def recalculate_render_variables
@@ -164,10 +183,6 @@ class MyGame < Gosu::Window
         # shouldn't ever happen; means screen and view ray are parallel
         if l_dot_n == 0
             raise "screen and view ray are parallel"
-        end
-        # why?
-        if p0_dot_n == 0
-            return nil
         end
         d = p0_dot_n / l_dot_n  
         return d * gradient
