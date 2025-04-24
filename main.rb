@@ -8,6 +8,9 @@ PLAYER_MOVEMENT_SPEED = 1.0 / 60
 MAX_RENDER_DISTANCE = 128
 MIN_RENDER_DISTANCE = 1
 
+FPS = 60.0
+DT = 1.0 / FPS
+
 class Plane
     attr_accessor :normal, :point
     def initialize(normal, point)
@@ -19,9 +22,11 @@ end
 class Player
     def initialize()
         @position = Vector.zero(3)
+        @velocity = Vector.zero(3)
         @view_angle = 0
+        @height_vector = Vector[0, 1, 0]
     end
-    attr_accessor :position, :view_angle
+    attr_accessor :position, :velocity, :view_angle, :height_vector
 end
 
 class MyGame < Gosu::Window
@@ -49,6 +54,11 @@ class MyGame < Gosu::Window
         # should be recalculated every frame
         recalculate_render_variables()
 
+        # World Settings---------------------------------------------------------------------------
+
+        @GRAVITY = Vector[0, -4, 0]
+        @FLOOR_HEIGHT = 0
+
         # list of vertex pairs for walls
         @walls = [
             [Vector[1.0, 1.0, 2.0], Vector[2.0, 1.0, 2.0], Vector[2.0, 0.0, 2.0], Vector[1.0, 0.0, 2.0]],
@@ -63,32 +73,46 @@ class MyGame < Gosu::Window
     def update
         # keyboard input handling
         if Gosu.button_down?(Gosu::KB_LEFT)
-            player.view_angle += CAMERA_PAN_SPEED
+            @player.view_angle += CAMERA_PAN_SPEED
         end
         if Gosu.button_down?(Gosu::KB_RIGHT)
-            player.view_angle -= CAMERA_PAN_SPEED
+            @player.view_angle -= CAMERA_PAN_SPEED
         end
         if Gosu.button_down?(Gosu::KB_W)
-            player.position += @view_vector * PLAYER_MOVEMENT_SPEED
+            @player.position += @view_vector * PLAYER_MOVEMENT_SPEED
         end
         if Gosu.button_down?(Gosu::KB_S)
-            player.position -= @view_vector * PLAYER_MOVEMENT_SPEED
+            @player.position -= @view_vector * PLAYER_MOVEMENT_SPEED
         end
         if Gosu.button_down?(Gosu::KB_A)
-            player.position -= @right_vector * PLAYER_MOVEMENT_SPEED
+            @player.position -= @right_vector * PLAYER_MOVEMENT_SPEED
         end
         if Gosu.button_down?(Gosu::KB_D)
-            player.position += @right_vector * PLAYER_MOVEMENT_SPEED
+            @player.position += @right_vector * PLAYER_MOVEMENT_SPEED
         end
-        if Gosu.button_down?(Gosu::KB_SPACE)
-            player.position += @up_vector * PLAYER_MOVEMENT_SPEED
+        if Gosu.button_down?(Gosu::KB_SPACE) # jump
+            if (@player.position[1] == @FLOOR_HEIGHT)
+                @player.velocity += Vector[0, 1.8, 0]
+            end
         end
         if Gosu.button_down?(Gosu::KB_LEFT_CONTROL)
-            player.position -= @up_vector * PLAYER_MOVEMENT_SPEED
+            @player.height_vector[1] = 0.5
+        else
+            @player.height_vector[1] = 1
         end
         if Gosu.button_down?(Gosu::KB_ESCAPE)
             close()
         end
+        # Physics:
+        @player.position += @player.velocity * DT
+        @player.velocity += @GRAVITY * DT
+        if (@player.position[1] < @FLOOR_HEIGHT)
+            @player.velocity = Vector.zero(3)
+            @player.position[1] = @FLOOR_HEIGHT
+        end
+        # printf("Position: %.2f, %.2f, %.2f\n", *@player.position)
+        # printf("Velocity: %.2f, %.2f, %.2f\n", *@player.velocity)
+
     end
   
     # overriden Gosu::Window function
@@ -116,10 +140,10 @@ class MyGame < Gosu::Window
             z = 1-z
             # puts("Screen coordinates: " + screen_coordinates.to_s())
             Gosu.draw_quad(
-                screen_coordinates[0][0], screen_coordinates[0][1], Gosu::Color::BLUE,
-                screen_coordinates[1][0], screen_coordinates[1][1], Gosu::Color::BLUE,
-                screen_coordinates[2][0], screen_coordinates[2][1], Gosu::Color::BLUE,
-                screen_coordinates[3][0], screen_coordinates[3][1], Gosu::Color::BLUE,
+                screen_coordinates[0][0], screen_coordinates[0][1], Gosu::Color.new(255, 0, 0, 160),
+                screen_coordinates[1][0], screen_coordinates[1][1], Gosu::Color.new(255, 0, 0, 160),
+                screen_coordinates[2][0], screen_coordinates[2][1], Gosu::Color.new(255, 0, 0, 80),
+                screen_coordinates[3][0], screen_coordinates[3][1], Gosu::Color.new(255, 0, 0, 80),
                 z
                 )
         end
@@ -128,7 +152,7 @@ class MyGame < Gosu::Window
     # determine the screen coordinates that a point translates to
     def get_screen_coordinates(point)
         # puts("Point: " + point.to_s())
-        point -= player.position
+        point -= (@player.position + @player.height_vector)
 
         intersect_point = get_intersect_point(point, @screen_plane)
         if intersect_point == nil
@@ -153,8 +177,8 @@ class MyGame < Gosu::Window
     end
 
     def recalculate_render_variables
-        @rotation_matrix = get_rotation_matrix(player.view_angle)
-        @reverse_rotation_matrix = get_rotation_matrix(-player.view_angle)
+        @rotation_matrix = get_rotation_matrix(@player.view_angle)
+        @reverse_rotation_matrix = get_rotation_matrix(-@player.view_angle)
         # this is actually fucked please please please use C or python next time
         @view_vector = (@initial_view_vector.to_matrix().transpose() * @rotation_matrix).row_vectors()[0]
         @right_vector = @view_vector.cross(Vector[0, -1, 0]) # left handed i think
