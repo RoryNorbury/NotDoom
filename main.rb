@@ -1,5 +1,6 @@
 require 'gosu'
 require "matrix"
+require_relative "levelEditor"
 
 PI = Math::PI
 RESOLUTION = [640, 640]
@@ -139,6 +140,7 @@ class MyGame < Gosu::Window
             z /= 4.0
             z = 1-z
             # puts("Screen coordinates: " + screen_coordinates.to_s())
+            # TODO: store wall colour either as global value or per vertex
             Gosu.draw_quad(
                 screen_coordinates[0][0], screen_coordinates[0][1], Gosu::Color.new(255, 0, 0, 160),
                 screen_coordinates[1][0], screen_coordinates[1][1], Gosu::Color.new(255, 0, 0, 160),
@@ -152,6 +154,7 @@ class MyGame < Gosu::Window
     # determine the screen coordinates that a point translates to
     def get_screen_coordinates(point)
         # puts("Point: " + point.to_s())
+        # move point into player space
         point -= (@player.position + @player.height_vector)
 
         intersect_point = get_intersect_point(point, @screen_plane)
@@ -211,8 +214,6 @@ class MyGame < Gosu::Window
         d = p0_dot_n / l_dot_n  
         return d * gradient
     end
-
-
 end
 
 def main()
