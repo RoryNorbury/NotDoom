@@ -38,7 +38,7 @@ class MyGame < Gosu::Window
         self.caption = "Not Doom"
 
         @player = Player.new()
-        @player.position -= Vector[0, 0, 1]
+        @player.position -= Vector[0, 0, 1] # should delete
         
         # variables for screen coordinate calculation
         @initial_view_vector = Vector[0.0, 0.0, 1.0]
