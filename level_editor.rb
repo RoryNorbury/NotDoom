@@ -4,7 +4,7 @@ require 'matrix'
 # TODO: allowing changing of scale 
 SCALE = 20 # pixels to a meter
 GRIDSIZE = SCALE / 2
-RESOLUTION = [1280, 360]
+RESOLUTION = [720, 360]
 ORIGIN = Vector.elements(RESOLUTION.map{|a|a/2.0})
 
 module Clock_index
@@ -153,7 +153,6 @@ class Level
     # loads a vector in from a txt file
     def load_vector(file_object)
         vector = Vector.elements(file_object.readline().split(',').map(&:to_f))
-        puts vector
         return vector
     end
     # returns an array of vertex quads usable for rendering

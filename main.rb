@@ -1,6 +1,5 @@
 require 'gosu'
 require "matrix"
-require_relative "levelEditor"
 
 PI = Math::PI
 RESOLUTION = [640, 640]
@@ -60,13 +59,9 @@ class MyGame < Gosu::Window
         @GRAVITY = Vector[0, -4, 0]
         @FLOOR_HEIGHT = 0
 
-        # list of vertex pairs for walls
-        @walls = [
-            [Vector[1.0, 1.0, 2.0], Vector[2.0, 1.0, 2.0], Vector[2.0, 0.0, 2.0], Vector[1.0, 0.0, 2.0]],
-            [Vector[0.0, 1.0, 2.0], Vector[1.0, 1.0, 2.0], Vector[1.0, 0.0, 2.0], Vector[0.0, 0.0, 2.0]],
-            [Vector[0.5, 1.0, 1.5], Vector[1.5, 1.0, 2.0], Vector[1.5, 0.0, 2.0], Vector[0.5, 0.0, 1.5]],
-            [Vector[0.5, 1.0, 2.0], Vector[1.5, 1.0, 2.5], Vector[1.5, 0.0, 2.5], Vector[0.5, 0.0, 2.0]]
-        ]
+        # list of vertex quads for walls, in anticlockwise order
+        @level_filename = "level.txt"
+        @walls = load_walls(@level_filename)
     end
     
     # overriden Gosu::Window function
@@ -213,6 +208,29 @@ class MyGame < Gosu::Window
         end
         d = p0_dot_n / l_dot_n  
         return d * gradient
+    end
+    def load_walls(filename)
+        walls = []
+        file = File.open(filename, "r")
+        while !file.eof? do
+            # load two vectors from the file and store them as a wall
+            v1 = load_vector(file)
+            v3 = load_vector(file)
+            # create other two vertices from first two
+            v2 = Vector[v3[0], v1[1], v1[2]]
+            v4 = Vector[v1[0], v3[1], v3[2]]
+            walls.push([v1, v2, v3, v4])
+        end
+        file.close()
+        puts walls.to_s()
+        return walls
+    end
+    # loads a vector in from a txt file
+    def load_vector(file_object)
+        vector = Vector.elements(file_object.readline().split(',').map(&:to_f))
+        # swap y and z coordinates
+        vector[1], vector[2] = vector[2], vector[1]
+        return vector
     end
 end
 
