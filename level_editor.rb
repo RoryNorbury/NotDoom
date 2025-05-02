@@ -59,10 +59,10 @@ class LevelEditor < Gosu::Window
     def draw_walls()
         i = 0
         while i < @level.walls.length
-            wall1 = (@level.walls[i].dup() * SCALE) + Vector[*ORIGIN, 0.0]
-            wall2 = (@level.walls[i+1].dup() * SCALE) + Vector[*ORIGIN, 0.0]
+            wall1 = (@level.walls[i][0].dup() * SCALE) + Vector[*ORIGIN, 0.0]
+            wall2 = (@level.walls[i][1].dup() * SCALE) + Vector[*ORIGIN, 0.0]
             draw_line(wall1[0], wall1[1], @line_colour, wall2[0], wall2[1], @line_colour)
-            i += 2
+            i += 1
         end
     end
 end
@@ -76,29 +76,36 @@ class Level
     def save_to_file(filename)
         file = File.open(filename, "a")
         @walls.each do |wall|
-            file.puts(wall.to_a.join(','))
+            file.puts(wall[0].to_a.join(','))
+            file.puts(wall[1].to_a.join(','))
         end
         file.close()
     end
     def load_from_file(filename)
         file = File.open(filename, "r")
-        file.each_line do |line|
-            vector = Vector.elements(line.split(',').map(&:to_f))
-            @walls.push(vector)
+        while !file.eof? do
+            # load two vectors from the file and store them as a wall
+            wall = Vector[load_vector(file), load_vector(file)]
+            @walls.push(wall)
         end
         file.close()
+    end
+    # loads a vector in from a txt file
+    def load_vector(file_object)
+        vector = Vector.elements(file_object.readline().split(',').map(&:to_f))
+        return vector
     end
     # returns an array of vertex quads usable for rendering
     def to_quad_array()
         quads = Array.new()
         i = 0
-        while i < @walls.length/2.0
+        while i < @walls.length
             quads.push(Array.new())
             # fuck pass by reference
-            quads[i].push(@walls[2 * i].dup())
-            quads[i].push(@walls[2 * i + 1].dup())
-            quads[i].push(@walls[2 * i + 1].dup())
-            quads[i].push(@walls[2 * i].dup())
+            quads[i].push(@walls[i][0].dup())
+            quads[i].push(@walls[i][1].dup())
+            quads[i].push(@walls[i][1].dup())
+            quads[i].push(@walls[i][0].dup())
             quads[i][1][2] = quads[i][0][2]
             quads[i][3][2] = quads[i][2][2]
             i += 1
