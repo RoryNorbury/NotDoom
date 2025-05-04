@@ -29,6 +29,11 @@ class Player
     attr_accessor :position, :velocity, :view_angle, :height_vector
 end
 
+Clock_array_length = 1
+module Clock_index
+    LoadFile = 0  
+end
+
 class MyGame < Gosu::Window
     attr_reader :player, :walls
     def initialize
@@ -62,12 +67,29 @@ class MyGame < Gosu::Window
         # list of vertex quads for walls, in anticlockwise order
         @level_filename = "level.txt"
         @walls = load_walls(@level_filename)
+
+        # array for storing cycle count
+        @clock_array = Array.new(Clock_array_length, 0)
     end
     
+    def update_clock_array()
+        @clock_array.length.times do |i|
+            @clock_array[i] += 1  
+        end  
+    end
     # overriden Gosu::Window function
     # frame-by-frame logic goes here
     def update
+        update_clock_array()
+        if (@clock_array[Clock_index::LoadFile] > 60)
+            @walls = load_walls(@level_filename)
+            @clock_array[Clock_index::LoadFile] = 0
+        end
         # keyboard input handling
+        movement_speed_multiplier = 1
+        if Gosu.button_down?(Gosu::KB_LEFT_SHIFT)
+            movement_speed_multiplier = 3 * movement_speed_multiplier
+        end
         if Gosu.button_down?(Gosu::KB_LEFT)
             @player.view_angle += CAMERA_PAN_SPEED
         end
@@ -75,16 +97,16 @@ class MyGame < Gosu::Window
             @player.view_angle -= CAMERA_PAN_SPEED
         end
         if Gosu.button_down?(Gosu::KB_W)
-            @player.position += @view_vector * PLAYER_MOVEMENT_SPEED
+            @player.position += @view_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_S)
-            @player.position -= @view_vector * PLAYER_MOVEMENT_SPEED
+            @player.position -= @view_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_A)
-            @player.position -= @right_vector * PLAYER_MOVEMENT_SPEED
+            @player.position -= @right_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_D)
-            @player.position += @right_vector * PLAYER_MOVEMENT_SPEED
+            @player.position += @right_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_SPACE) # jump
             if (@player.position[1] == @FLOOR_HEIGHT)
@@ -217,19 +239,19 @@ class MyGame < Gosu::Window
             v1 = load_vector(file)
             v3 = load_vector(file)
             # create other two vertices from first two
-            v2 = Vector[v3[0], v1[1], v1[2]]
-            v4 = Vector[v1[0], v3[1], v3[2]]
+            v2 = Vector[v3[0], v1[1], v3[2]]
+            v4 = Vector[v1[0], v3[1], v1[2]]
             walls.push([v1, v2, v3, v4])
         end
         file.close()
-        puts walls.to_s()
         return walls
     end
     # loads a vector in from a txt file
     def load_vector(file_object)
+        # vectors are stored as 'x,z,y'
         vector = Vector.elements(file_object.readline().split(',').map(&:to_f))
         # swap y and z coordinates
-        vector[1], vector[2] = vector[2], vector[1]
+        vector[1], vector[2] = vector[2], -vector[1]
         return vector
     end
 end

@@ -36,7 +36,7 @@ class LevelEditor < Gosu::Window
         @last_click_coordinate = nil
 
         # clock array for tracking
-        @clock_array = Array.new(3, 0)
+        @clock_array = Array.new(4, 0)
     end
     def update
         # update clock array
@@ -57,7 +57,7 @@ class LevelEditor < Gosu::Window
                     if (current_position != @last_click_coordinate)
                         @level.walls.push(
                             Vector[
-                            Vector[*((@last_click_coordinate - ORIGIN) / SCALE), @default_wall_height],
+                            Vector[*((@last_click_coordinate - ORIGIN) / SCALE), 0.0],
                             Vector[*((current_position - ORIGIN) / SCALE), @default_wall_height]
                             ])
                         @last_click_coordinate = current_position
@@ -82,7 +82,10 @@ class LevelEditor < Gosu::Window
         end
         
         # save walls to file
-        @level.save_to_file(@filename)
+        if @clock_array[Clock_index::File] > 60
+            @level.save_to_file(@filename)
+            @clock_array[Clock_index::File] = 0                      
+        end
     end
     def draw
         # draw black background
@@ -166,6 +169,7 @@ class Level
             quads[i].push(@walls[i][1].dup())
             quads[i].push(@walls[i][1].dup())
             quads[i].push(@walls[i][0].dup())
+            # this is wrong, x and y do not alternate
             quads[i][1][2] = quads[i][0][2]
             quads[i][3][2] = quads[i][2][2]
             i += 1
