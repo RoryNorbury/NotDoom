@@ -5,8 +5,8 @@ PI = Math::PI
 RESOLUTION = [640, 640]
 CAMERA_PAN_SPEED = PI/4 / 60
 PLAYER_MOVEMENT_SPEED = 1.0 / 60
-MAX_RENDER_DISTANCE = 128
-MIN_RENDER_DISTANCE = 1
+MAX_RENDER_DISTANCE = 1024.0
+MIN_RENDER_DISTANCE = 0.0001
 
 FPS = 60.0
 DT = 1.0 / FPS
@@ -91,10 +91,10 @@ class MyGame < Gosu::Window
             movement_speed_multiplier = 3 * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_LEFT)
-            @player.view_angle += CAMERA_PAN_SPEED
+            @player.view_angle += CAMERA_PAN_SPEED * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_RIGHT)
-            @player.view_angle -= CAMERA_PAN_SPEED
+            @player.view_angle -= CAMERA_PAN_SPEED * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_W)
             @player.position += @view_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
@@ -144,27 +144,30 @@ class MyGame < Gosu::Window
     def draw_walls(wall_vertices)
         wall_vertices.each do |wall|
             screen_coordinates = Array.new(4, Vector.zero(2))
-            # if the point maps to a position on the screen
             z = 0
+            nil_coordinate = false
             for i in 0..3
                 screen_coordinates[i] = get_screen_coordinates(wall[i])
                 if screen_coordinates[i] == nil
-                    return
+                    nil_coordinate = true
+                    break
                 end
                 screen_coordinates[i] *= RESOLUTION[0] # TODO: allow non-square screen - use aspect ratio
                 z += screen_coordinates[i][2]
             end
-            z /= 4.0
-            z = 1-z
-            # puts("Screen coordinates: " + screen_coordinates.to_s())
-            # TODO: store wall colour either as global value or per vertex
-            Gosu.draw_quad(
-                screen_coordinates[0][0], screen_coordinates[0][1], Gosu::Color.new(255, 0, 0, 160),
-                screen_coordinates[1][0], screen_coordinates[1][1], Gosu::Color.new(255, 0, 0, 160),
-                screen_coordinates[2][0], screen_coordinates[2][1], Gosu::Color.new(255, 0, 0, 80),
-                screen_coordinates[3][0], screen_coordinates[3][1], Gosu::Color.new(255, 0, 0, 80),
-                z
-                )
+            if (!nil_coordinate)
+                z /= 4.0
+                z = 1-z
+                # puts("Screen coordinates: " + screen_coordinates.to_s())
+                # TODO: store wall colour either as global value or per vertex
+                Gosu.draw_quad(
+                    screen_coordinates[0][0], screen_coordinates[0][1], Gosu::Color.new(255, 0, 0, 160),
+                    screen_coordinates[1][0], screen_coordinates[1][1], Gosu::Color.new(255, 0, 0, 160),
+                    screen_coordinates[2][0], screen_coordinates[2][1], Gosu::Color.new(255, 0, 0, 80),
+                    screen_coordinates[3][0], screen_coordinates[3][1], Gosu::Color.new(255, 0, 0, 80),
+                    z
+                    )
+            end
         end
     end
     
@@ -188,7 +191,7 @@ class MyGame < Gosu::Window
         intersect_point = (intersect_point.to_matrix().transpose() * @reverse_rotation_matrix ).row_vectors()[0]
         # puts("Intersect point: " + intersect_point.to_s())
 
-        # transform into screen coordinates (becomes depth)
+        # transform into screen coordinates (z becomes depth)
         a = Vector[intersect_point[0], -intersect_point[1], z] # y axis flipped
         screen_coordinates = a + Vector[0.5, 0.5, 0.0]
         # puts("Screen coordinates: " + screen_coordinates.to_s())
@@ -218,8 +221,10 @@ class MyGame < Gosu::Window
         # source: https://en.wikipedia.org/wiki/Line–plane_intersection#Algebraic_form
         # assuming l0 is the origin ([0, 0, 0])
 
+        # WARNING: Currently entire face will not be rendered if any point is behind view plane
+
         # if p0 * l <= 0 point is behind player
-        if plane.point.dot(gradient) <= 0
+        if plane.point.dot(gradient) <= 0 # possibly test is point is in reverse viewing frustrum instread? (compare to dot of screen edge)
             return nil
         end
         p0_dot_n = plane.point.dot(plane.normal)
