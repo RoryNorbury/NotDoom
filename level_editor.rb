@@ -176,24 +176,6 @@ class Level
         vector = Vector.elements(file_object.readline().split(',').map(&:to_f))
         return vector
     end
-    # returns an array of vertex quads usable for rendering
-    def to_quad_array()
-        quads = Array.new()
-        i = 0
-        while i < @walls.length
-            quads.push(Array.new())
-            # fuck pass by reference
-            quads[i].push(@walls[i][0].dup())
-            quads[i].push(@walls[i][1].dup())
-            quads[i].push(@walls[i][1].dup())
-            quads[i].push(@walls[i][0].dup())
-            # this is wrong, x and y do not alternate
-            quads[i][1][2] = quads[i][0][2]
-            quads[i][3][2] = quads[i][2][2]
-            i += 1
-        end
-        return quads
-    end
     # delete any wall with the same vector
     def delete_wall(vector)
         i = 0
