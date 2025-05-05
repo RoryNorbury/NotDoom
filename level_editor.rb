@@ -1,10 +1,7 @@
 require 'gosu'
 require 'matrix'
 
-# TODO: allowing changing of scale 
-SCALE = 20 # pixels to a meter
-GRIDSIZE = SCALE / 2
-RESOLUTION = [720, 360]
+RESOLUTION = [360, 360]
 ORIGIN = Vector.elements(RESOLUTION.map{|a|a/2.0})
 
 module Clock_index
@@ -25,6 +22,9 @@ class LevelEditor < Gosu::Window
         @level.save_to_file(@backup_filename)
         @default_wall_height = 4.0 # meters
         
+        @scale = 40 # pixels to a meter
+        @gridsize = @scale / 2.0
+
         # colours
         @background_colour = Gosu::Color::BLACK
         @grid_colour = Gosu::Color.argb(255, 32, 32, 32)
@@ -57,8 +57,8 @@ class LevelEditor < Gosu::Window
                     if (current_position != @last_click_coordinate)
                         @level.walls.push(
                             Vector[
-                            Vector[*((@last_click_coordinate - ORIGIN) / SCALE), 0.0],
-                            Vector[*((current_position - ORIGIN) / SCALE), @default_wall_height]
+                            Vector[*((@last_click_coordinate - ORIGIN) / @scale), 0.0],
+                            Vector[*((current_position - ORIGIN) / @scale), @default_wall_height]
                             ])
                         @last_click_coordinate = current_position
                         @is_drawing_line = false
@@ -77,7 +77,25 @@ class LevelEditor < Gosu::Window
             else
                 # delete wall if it exists
                 closest_gridpoint = get_closest_gridpoint(Vector[mouse_x, mouse_y])
-                @level.delete_wall(Vector[*((closest_gridpoint - ORIGIN) / SCALE)])
+                @level.delete_wall(Vector[*((closest_gridpoint - ORIGIN) / @scale)])
+            end
+        end
+        if Gosu.button_down?(Gosu::KB_DOWN)
+            if @clock_array[Clock_index::Key] > 5
+                @scale *= 2.0/3.0 # pixels to a meter
+                @gridsize = @scale / 2.0
+                @clock_array[Clock_index::Key] = 0
+                printf("Scale: %f\n", @scale)
+                printf("Grid size: %f\n\n", @gridsize)
+            end
+        end
+        if Gosu.button_down?(Gosu::KB_UP)
+            if @clock_array[Clock_index::Key] > 5
+                @scale *= 1.5 # pixels to a meter
+                @gridsize = @scale / 2.0
+                @clock_array[Clock_index::Key] = 0
+                printf("Scale: %f\n", @scale)
+                printf("Grid size: %f\n\n", @gridsize)
             end
         end
         
@@ -91,19 +109,19 @@ class LevelEditor < Gosu::Window
         # draw black background
         draw_rect(0, 0, *RESOLUTION, Gosu::Color::BLACK)
         # draw grid
-        x_grid_count = RESOLUTION[0] / GRIDSIZE
-        y_grid_count = RESOLUTION[1] / GRIDSIZE
+        x_grid_count = (RESOLUTION[0] / @gridsize).ceil()
+        y_grid_count = (RESOLUTION[1] / @gridsize).ceil()
         # vertical lines
-        x = ORIGIN[0] - GRIDSIZE * (x_grid_count / 2)
+        x = ORIGIN[0] - @gridsize * (x_grid_count / 2)
         while x < RESOLUTION[0]
             draw_line(x, 0, @grid_colour, x, RESOLUTION[1], @grid_colour)
-            x += GRIDSIZE
+            x += @gridsize
         end
         # horizontal lines
-        y = ORIGIN[1] - GRIDSIZE * (y_grid_count / 2)
+        y = ORIGIN[1] - @gridsize * (y_grid_count / 2)
         while y < RESOLUTION[1]
             draw_line(0, y, @grid_colour, RESOLUTION[0], y, @grid_colour)
-            y += GRIDSIZE
+            y += @gridsize
         end
         draw_walls()
         # draw current line
@@ -111,21 +129,21 @@ class LevelEditor < Gosu::Window
             draw_line(*@last_click_coordinate, @line_colour, mouse_x, mouse_y, @line_colour)  
         end
         # draw player position
-        draw_triangle(*(ORIGIN + Vector[-GRIDSIZE / 2, GRIDSIZE / 2]), @player_colour, *(ORIGIN + Vector[0, -GRIDSIZE / 2]), @player_colour, *(ORIGIN + Vector[GRIDSIZE / 2, GRIDSIZE / 2]), @player_colour)
+        draw_triangle(*(ORIGIN + Vector[-@gridsize / 2, @gridsize / 2]), @player_colour, *(ORIGIN + Vector[0, -@gridsize / 2]), @player_colour, *(ORIGIN + Vector[@gridsize / 2, @gridsize / 2]), @player_colour)
     end
     def draw_walls()
         i = 0
         while i < @level.walls.length
-            wall1 = (@level.walls[i][0].dup() * SCALE) + Vector[*ORIGIN, 0.0]
-            wall2 = (@level.walls[i][1].dup() * SCALE) + Vector[*ORIGIN, 0.0]
+            wall1 = (@level.walls[i][0].dup() * @scale) + Vector[*ORIGIN, 0.0]
+            wall2 = (@level.walls[i][1].dup() * @scale) + Vector[*ORIGIN, 0.0]
             draw_line(wall1[0], wall1[1], @line_colour, wall2[0], wall2[1], @line_colour)
             i += 1
         end
     end
     def get_closest_gridpoint(vector)
-        # round the vector to the nearest grid point     
-        x = GRIDSIZE * ((vector[0] - ORIGIN[0]) / GRIDSIZE.to_f()).round() + ORIGIN[0]
-        y = GRIDSIZE * ((vector[1] - ORIGIN[1]) / GRIDSIZE.to_f()).round() + ORIGIN[1]
+        # round the vector to the nearest grid point
+        x = @gridsize * ((vector[0] - ORIGIN[0]) / @gridsize.to_f()).round() + ORIGIN[0]
+        y = @gridsize * ((vector[1] - ORIGIN[1]) / @gridsize.to_f()).round() + ORIGIN[1]
         return Vector[x, y]
     end
 end
@@ -181,8 +199,9 @@ class Level
         i = 0
         while i < @walls.length
             # delete wall if it matches the x and y values of either vector in wall
-            if ((@walls[i][0][0] == vector[0] and @walls[i][0][1] == vector[1]) or (@walls[i][1][0] == vector[0] and @walls[i][1][1] == vector[1]))
-                @walls.delete_at(i)  
+            err = 0.001 # allowed error margin
+            if ((abs_diff(@walls[i][0][0], vector[0]) < err and abs_diff(@walls[i][0][1], vector[1]) < err) or (abs_diff(@walls[i][1][0], vector[0]) < err and abs_diff(@walls[i][1][1], vector[1]) < err))
+                @walls.delete_at(i)
             end
             i += 1
         end
@@ -194,6 +213,10 @@ def print_quad_array(quads)
         puts quad
         puts "\n"  
     end  
+end
+
+def abs_diff(a, b)
+    return (a-b).abs
 end
 
 def main()

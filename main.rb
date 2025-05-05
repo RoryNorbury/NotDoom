@@ -81,7 +81,7 @@ class MyGame < Gosu::Window
     # frame-by-frame logic goes here
     def update
         update_clock_array()
-        if (@clock_array[Clock_index::LoadFile] > 60)
+        if (@clock_array[Clock_index::LoadFile] > 15)
             @walls = load_walls(@level_filename)
             @clock_array[Clock_index::LoadFile] = 0
         end
