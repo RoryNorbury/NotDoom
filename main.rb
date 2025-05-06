@@ -4,7 +4,7 @@ require "matrix"
 PI = Math::PI
 RESOLUTION = [640, 640]
 CAMERA_PAN_SPEED = PI/4 / 60
-PLAYER_MOVEMENT_SPEED = 1.0 / 60
+PLAYER_MOVEMENT_SPEED = 2.0 / 60
 MAX_RENDER_DISTANCE = 1024.0
 MIN_RENDER_DISTANCE = 0.0001
 
@@ -63,6 +63,10 @@ class MyGame < Gosu::Window
 
         @GRAVITY = Vector[0, -4, 0]
         @FLOOR_HEIGHT = 0
+
+        @floor_colour = Gosu::Color.new(255, 60, 60, 60)
+        @wall_colour_a = Gosu::Color.new(255, 0, 0, 160)
+        @wall_colour_b = Gosu::Color.new(255, 0, 0, 80)
 
         # list of vertex quads for walls, in anticlockwise order
         @level_filename = "level.txt"
@@ -138,6 +142,7 @@ class MyGame < Gosu::Window
     def draw
         recalculate_render_variables()
         draw_walls(@walls)
+        draw_floor()
     end
 
     # draw walls to screen
@@ -161,16 +166,23 @@ class MyGame < Gosu::Window
                 # puts("Screen coordinates: " + screen_coordinates.to_s())
                 # TODO: store wall colour either as global value or per vertex
                 Gosu.draw_quad(
-                    screen_coordinates[0][0], screen_coordinates[0][1], Gosu::Color.new(255, 0, 0, 160),
-                    screen_coordinates[1][0], screen_coordinates[1][1], Gosu::Color.new(255, 0, 0, 160),
-                    screen_coordinates[2][0], screen_coordinates[2][1], Gosu::Color.new(255, 0, 0, 80),
-                    screen_coordinates[3][0], screen_coordinates[3][1], Gosu::Color.new(255, 0, 0, 80),
+                    screen_coordinates[0][0], screen_coordinates[0][1], @wall_colour_b,
+                    screen_coordinates[1][0], screen_coordinates[1][1], @wall_colour_b,
+                    screen_coordinates[2][0], screen_coordinates[2][1], @wall_colour_a,
+                    screen_coordinates[3][0], screen_coordinates[3][1], @wall_colour_a,
                     z
                     )
             end
         end
     end
     
+    # draw the floor (drawn last, behind everything)
+    # probably doesn't deserve its own function
+    def draw_floor()
+        # floor will always cover bottom half of screen
+        Gosu.draw_rect(0, RESOLUTION[1]/2.0, RESOLUTION[0], RESOLUTION[1], @floor_colour, -256.0)
+    end
+
     # determine the screen coordinates that a point translates to
     def get_screen_coordinates(point)
         # puts("Point: " + point.to_s())
@@ -226,7 +238,7 @@ class MyGame < Gosu::Window
         # if p0 * l <= 0 point is behind player
         if plane.point.dot(gradient) <= 0 # possibly test is point is in reverse viewing frustrum instread? (compare to dot of screen edge)
             return nil
-        end
+        end       
         p0_dot_n = plane.point.dot(plane.normal)
         l_dot_n = gradient.dot(plane.normal)
         # shouldn't ever happen; means screen and view ray are parallel
