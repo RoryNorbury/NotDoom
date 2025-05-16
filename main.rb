@@ -64,9 +64,10 @@ class MyGame < Gosu::Window
         @GRAVITY = Vector[0, -4, 0]
         @FLOOR_HEIGHT = 0
 
-        @floor_colour = Gosu::Color.new(255, 60, 60, 60)
-        @wall_colour_a = Gosu::Color.new(255, 0, 0, 160)
-        @wall_colour_b = Gosu::Color.new(255, 0, 0, 80)
+        @floor_colour = Gosu::Color.new(255, 30, 30, 30)
+        @sky_colour = Gosu::Color.new(255, 25, 10, 0)
+        @wall_colour_a = Gosu::Color.new(255, 50, 50, 50)
+        @wall_colour_b = Gosu::Color.new(255, 20, 20, 20)
 
         # list of vertex quads for walls, in anticlockwise order
         @level_filename = "level.txt"
@@ -142,7 +143,7 @@ class MyGame < Gosu::Window
     def draw
         recalculate_render_variables()
         draw_walls(@walls)
-        draw_floor()
+        draw_background()
     end
 
     # draw walls to screen
@@ -176,11 +177,13 @@ class MyGame < Gosu::Window
         end
     end
     
-    # draw the floor (drawn last, behind everything)
+    # draw the floor and sky (drawn last, behind everything)
     # probably doesn't deserve its own function
-    def draw_floor()
+    def draw_background()
         # floor will always cover bottom half of screen
-        Gosu.draw_rect(0, RESOLUTION[1]/2.0, RESOLUTION[0], RESOLUTION[1], @floor_colour, -256.0)
+        Gosu.draw_rect(0, RESOLUTION[1]/2.0, RESOLUTION[0], RESOLUTION[1]/2.0, @floor_colour, -256.0)
+        #sky covers the other half
+        Gosu.draw_rect(0, 0, RESOLUTION[0], RESOLUTION[1]/2.0, @sky_colour, -256.0)
     end
 
     # determine the screen coordinates that a point translates to
