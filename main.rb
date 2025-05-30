@@ -1,3 +1,7 @@
+# extend gosu functions structure chart
+# 2 records
+# 1 enumeration
+
 require 'gosu'
 require "matrix"
 
@@ -31,8 +35,11 @@ end
 
 Clock_array_length = 1
 module Clock_index
-    LoadFile = 0  
+    Load_file = 0
+    User_click = 1
+    User_keyboard = 2
 end
+
 
 class MyGame < Gosu::Window
     attr_reader :player, :walls
@@ -42,7 +49,7 @@ class MyGame < Gosu::Window
         self.caption = "Not Doom"
 
         @player = Player.new()
-        @player.position -= Vector[0, 0, 1] # should delete
+        #@player.position -= Vector[0, 0, 1] # should delete
         
         # variables for screen coordinate calculation
         @initial_view_vector = Vector[0.0, 0.0, 1.0]
@@ -82,13 +89,21 @@ class MyGame < Gosu::Window
             @clock_array[i] += 1  
         end  
     end
+
+    # happens before update
+    def button_down(id)
+        case id
+        when 0  
+        end
+    end
+
     # overriden Gosu::Window function
     # frame-by-frame logic goes here
     def update
         update_clock_array()
-        if (@clock_array[Clock_index::LoadFile] > 15)
+        if (@clock_array[Clock_index::Load_file] > 15)
             @walls = load_walls(@level_filename)
-            @clock_array[Clock_index::LoadFile] = 0
+            @clock_array[Clock_index::Load_file] = 0
         end
         # keyboard input handling
         movement_speed_multiplier = 1
@@ -135,7 +150,6 @@ class MyGame < Gosu::Window
         end
         # printf("Position: %.2f, %.2f, %.2f\n", *@player.position)
         # printf("Velocity: %.2f, %.2f, %.2f\n", *@player.velocity)
-
     end
   
     # overriden Gosu::Window function
@@ -257,14 +271,32 @@ class MyGame < Gosu::Window
         while !file.eof? do
             # load two vectors from the file and store them as a wall
             v1 = load_vector(file)
-            v3 = load_vector(file)
-            # create other two vertices from first two
-            v2 = Vector[v3[0], v1[1], v3[2]]
-            v4 = Vector[v1[0], v3[1], v1[2]]
-            walls.push([v1, v2, v3, v4])
+            v2 = load_vector(file)
+            walls.push(corners_to_vertices(v1, v2))
         end
         file.close()
+        # split walls for better rendering
+        walls = split_walls(walls)
         return walls
+    end
+    # splits a wall segment into many smaller segments
+    def split_walls(walls)
+        output = Array.new()
+        walls.each do |wall|
+            w1, w2 = wall[0], wall[2] # opposite corners of wall
+            length = Math.sqrt((w1[0] - w2[0])**2 + (w1[2] - w2[2])**2)
+            segment_count = length.ceil
+            # z and x change per segment
+            dx = (w2[0] - w1[0]) / segment_count
+            dz = (w2[2] - w1[2]) / segment_count
+            p1 = Vector[w1[0], w2[1], w1[2]]
+            for i in 1..segment_count
+                p0 = Vector[p1[0], w1[1], p1[2]]
+                p1 = Vector[p1[0] + dx, w2[1], p1[2] + dz]
+                output.push(corners_to_vertices(p0, p1))
+            end
+        end
+        return output
     end
     # loads a vector in from a txt file
     def load_vector(file_object)
@@ -274,7 +306,17 @@ class MyGame < Gosu::Window
         vector[1], vector[2] = vector[2], -vector[1]
         return vector
     end
+
+    # convert two points to an array of four vectors that correspond to the corners of a wall
+    def corners_to_vertices(v1, v2)
+        # create other two vertices from first two
+        v3 = Vector[v2[0], v1[1], v2[2]]
+        v4 = Vector[v1[0], v2[1], v1[2]]
+        return [v1, v3, v2, v4]
+    end
 end
+
+
 
 def main()
     MyGame.new.show()
