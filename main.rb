@@ -11,6 +11,7 @@ CAMERA_PAN_SPEED = PI/2 / 60
 PLAYER_MOVEMENT_SPEED = 2.0 / 60
 MAX_RENDER_DISTANCE = 1024.0
 MIN_RENDER_DISTANCE = 0.0001
+PLAYER_HITBOX_SIZE = 1.1
 
 FPS = 60.0
 DT = 1.0 / FPS
@@ -144,17 +145,22 @@ class MyGame < Gosu::Window
         if Gosu.button_down?(Gosu::KB_ESCAPE)
             close()
         end
-        # Physics:
-        @player.position += @player.velocity * DT
-        @player.velocity += @GRAVITY * DT
-        if (@player.position[1] < @FLOOR_HEIGHT)
-            @player.velocity = Vector.zero(3)
-            @player.position[1] = @FLOOR_HEIGHT
-        end
-        # printf("Position: %.2f, %.2f, %.2f\n", *@player.position)
-        # printf("Velocity: %.2f, %.2f, %.2f\n", *@player.velocity)
+        update_player_position()
     end
-  
+    
+    # moves player with velocity
+    def update_player_position()
+        # Physics:
+        new_position = @player.position + @player.velocity * DT
+        @player.velocity += @GRAVITY * DT
+
+        if (new_position[1] < @FLOOR_HEIGHT)
+            @player.velocity = Vector.zero(3)
+            new_position[1] = @FLOOR_HEIGHT
+        end
+        @player.position = new_position
+    end
+
     # overriden Gosu::Window function
     # drawing calls go here
     def draw
