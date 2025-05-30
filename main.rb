@@ -7,7 +7,7 @@ require "matrix"
 
 PI = Math::PI
 RESOLUTION = [640, 640]
-CAMERA_PAN_SPEED = PI/4 / 60
+CAMERA_PAN_SPEED = PI/2 / 60
 PLAYER_MOVEMENT_SPEED = 2.0 / 60
 MAX_RENDER_DISTANCE = 1024.0
 MIN_RENDER_DISTANCE = 0.0001
@@ -91,11 +91,14 @@ class MyGame < Gosu::Window
     end
 
     # happens before update
+    # happens on key press but not key hold
     def button_down(id)
         case id
-        when 0  
+        when Gosu::KB_R
+            @player.position = Vector.zero(3)
         end
     end
+
 
     # overriden Gosu::Window function
     # frame-by-frame logic goes here
@@ -111,10 +114,10 @@ class MyGame < Gosu::Window
             movement_speed_multiplier = 3 * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_LEFT)
-            @player.view_angle += CAMERA_PAN_SPEED * movement_speed_multiplier
+            @player.view_angle += CAMERA_PAN_SPEED
         end
         if Gosu.button_down?(Gosu::KB_RIGHT)
-            @player.view_angle -= CAMERA_PAN_SPEED * movement_speed_multiplier
+            @player.view_angle -= CAMERA_PAN_SPEED
         end
         if Gosu.button_down?(Gosu::KB_W)
             @player.position += @view_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
