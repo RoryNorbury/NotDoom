@@ -72,10 +72,10 @@ class MyGame < Gosu::Window
         @GRAVITY = Vector[0, -4, 0]
         @FLOOR_HEIGHT = 0
 
-        @floor_colour = Gosu::Color.new(255, 30, 30, 30)
-        @sky_colour = Gosu::Color.new(255, 25, 10, 0)
-        @wall_colour_a = Gosu::Color.new(255, 50, 50, 50)
-        @wall_colour_b = Gosu::Color.new(255, 20, 20, 20)
+        @floor_colour = Gosu::Color.new(255, 60, 60, 60)
+        @sky_colour = Gosu::Color.new(255, 50, 20, 0)
+        @wall_colour_a = Gosu::Color.new(255, 100, 100, 100)
+        @wall_colour_b = Gosu::Color.new(255, 40, 40, 40)
 
         # list of vertex quads for walls, in anticlockwise order
         @level_filename = "level.txt"
