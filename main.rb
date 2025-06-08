@@ -100,6 +100,9 @@ class MyGame < Gosu::Window
         self.caption = "Not Doom"
 
         @player = Player.new()
+
+        # font used for drawing text
+        @screen_font = Gosu::Font.new(24, {:name => "Aptos"})
         
         # variables for screen coordinate calculation
         @initial_view_vector = Vector[0.0, 0.0, 1.0]
@@ -150,7 +153,6 @@ class MyGame < Gosu::Window
             close()
         end
     end
-
 
     # overriden Gosu::Window function
     # frame-by-frame logic goes here
@@ -239,10 +241,6 @@ class MyGame < Gosu::Window
         end
         if collision
             new_position = Vector[@player.position[0], new_position[1], player.position[2]]
-            puts "collision"
-            puts new_position
-            puts @player.position
-            puts
         end
         @player.position = new_position
 
@@ -254,6 +252,12 @@ class MyGame < Gosu::Window
         recalculate_render_variables()
         draw_walls(@walls)
         draw_background()
+        draw_text()
+    end
+
+    # draw info onto screen
+    def draw_text()
+        @screen_font.draw_text("FPS: " + Gosu.fps().to_s(), 5, 5, 1)
     end
 
     # draw walls to screen
