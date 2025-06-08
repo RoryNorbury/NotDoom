@@ -41,6 +41,23 @@ module Clock_index
     User_keyboard = 2
 end
 
+class Intersect_data
+    attr_accessor :p1, :p2, :m, :c
+    def initialize(p1, p2)
+        @p1 = p1
+        @p2 = p2
+        # Note: if line is vertical, c represents constant x value
+        if (p1[0] == p2[0])
+            m = nil
+            c = p1[0]
+        else
+            m = (p1[1] - p2[1]) / (p1[0] - p2[0])
+            c = p1[1] - m * p1[0]
+        end
+
+    end
+end
+
 
 class MyGame < Gosu::Window
     attr_reader :player, :walls
@@ -97,6 +114,8 @@ class MyGame < Gosu::Window
         case id
         when Gosu::KB_R
             @player.position = Vector.zero(3)
+        when Gosu::KB_ESCAPE
+            close()
         end
     end
 
@@ -142,9 +161,6 @@ class MyGame < Gosu::Window
         else
             @player.height_vector[1] = 1
         end
-        if Gosu.button_down?(Gosu::KB_ESCAPE)
-            close()
-        end
         update_player_position()
     end
     
@@ -154,10 +170,14 @@ class MyGame < Gosu::Window
         new_position = @player.position + @player.velocity * DT
         @player.velocity += @GRAVITY * DT
 
+        # make sure player is above the floor
         if (new_position[1] < @FLOOR_HEIGHT)
             @player.velocity = Vector.zero(3)
             new_position[1] = @FLOOR_HEIGHT
         end
+        # check collision with walls
+        # use AABBs for broad phase
+        # and line-line intersect test for narrow phase
         @player.position = new_position
     end
 
@@ -274,6 +294,20 @@ class MyGame < Gosu::Window
         d = p0_dot_n / l_dot_n  
         return d * gradient
     end
+
+    # create data used for intersection tests
+    # makes ihntersect tests cheaper
+    def generate_intersect_data(walls)
+        intersect_data = []
+        walls.each do |wall|
+            p1 = Vector[wall[0][0], wall[0][2]]
+            p2 = Vector[wall[1][0], wall[1][2]]
+            intersect_data.push(Intersect_data.new(p1, p2))
+        end
+        return intersect_data
+    end
+
+    # load walls from file
     def load_walls(filename)
         walls = []
         file = File.open(filename, "r")
@@ -284,10 +318,13 @@ class MyGame < Gosu::Window
             walls.push(corners_to_vertices(v1, v2))
         end
         file.close()
+        # create intersect data from unsplit walls
+        @intersect_data = generate_intersect_data(walls)
         # split walls for better rendering
         walls = split_walls(walls)
         return walls
     end
+
     # splits a wall segment into many smaller segments
     def split_walls(walls)
         output = Array.new()
@@ -307,6 +344,7 @@ class MyGame < Gosu::Window
         end
         return output
     end
+
     # loads a vector in from a txt file
     def load_vector(file_object)
         # vectors are stored as 'x,z,y'
