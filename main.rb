@@ -8,7 +8,7 @@ require "matrix"
 PI = Math::PI
 RESOLUTION = [640, 640]
 CAMERA_PAN_SPEED = PI/2 / 60
-PLAYER_MOVEMENT_SPEED = 2.0 / 60
+PLAYER_MOVEMENT_SPEED = 2.0
 MAX_RENDER_DISTANCE = 1024.0
 MIN_RENDER_DISTANCE = 0.0001
 PLAYER_HITBOX_SIZE = 1.1
@@ -42,22 +42,55 @@ module Clock_index
 end
 
 class Intersect_data
-    attr_accessor :p1, :p2, :m, :c
+    attr_accessor :p1, :p2, :m, :c, :minX, :maxX, :minY, :maxY
     def initialize(p1, p2)
         @p1 = p1
         @p2 = p2
+        @minX = [p1[0], p2[0]].min
+        @maxX = [p1[0], p2[0]].max
+        @minY = [p1[1], p2[1]].min
+        @maxY = [p1[1], p2[1]].max
+        # printf("p1: %f, %f\np2: %f, %f\nminX: %f\nminY: %f\nmaxX: %f\maxY%f\n\n", *p1, *p2, @minX, @minY)
         # Note: if line is vertical, c represents constant x value
         if (p1[0] == p2[0])
-            m = nil
-            c = p1[0]
+            @m = nil
+            @c = p1[0]
         else
-            m = (p1[1] - p2[1]) / (p1[0] - p2[0])
-            c = p1[1] - m * p1[0]
+            @m = (p1[1] - p2[1]) / (p1[0] - p2[0])
+            @c = p1[1] - @m * p1[0]
         end
-
+    end
+    def intersects?(other)
+        # line is vertical
+        if @m == nil
+            if other.m == nil
+                return(@c == other.c)
+            else
+                # intersect point
+                ix, iy = @c, other.m * @c + other.c
+                return ((iy >= @minY) && (iy <= @maxY) && (ix >= other.minX) && (ix <= other.maxX) && (iy >= other.minY) && (iy <= other.maxY))
+            end
+        # other line is vertical
+        elsif other.m == nil
+            # intersect point
+            ix, iy = other.c, @m * other.c + @c
+            return ((iy >= other.minY) && (iy <= other.maxY) && (ix >= @minX) && (ix <= @maxX) && (iy >= @minY) && (iy <= @maxY))
+        # lines are the same
+        elsif (@m == other.m)
+            if (@c == other.c)
+                return ((@minX <= other.maxX) && (@maxX >= other.minX) && (@minY <= other.maxY) && (@maxY >= other.minY))
+            else
+                return false
+            end
+        # if lines are actually normal
+        else
+            # intersect point
+            ix = (other.c - @c) / (@m - other.m)
+            iy = @m*ix + @c
+            return ((ix >= @minX) && (ix <= @maxX) && (iy >= @minY) && (iy <= @maxY) && (ix >= other.minX) && (ix <= other.maxX) && (iy >= other.minY) && (iy <= other.maxY))
+        end
     end
 end
-
 
 class MyGame < Gosu::Window
     attr_reader :player, :walls
@@ -67,7 +100,6 @@ class MyGame < Gosu::Window
         self.caption = "Not Doom"
 
         @player = Player.new()
-        #@player.position -= Vector[0, 0, 1] # should delete
         
         # variables for screen coordinate calculation
         @initial_view_vector = Vector[0.0, 0.0, 1.0]
@@ -123,6 +155,9 @@ class MyGame < Gosu::Window
     # overriden Gosu::Window function
     # frame-by-frame logic goes here
     def update
+        # set horizontal velocity to 0
+        @player.velocity[0] = 0
+        @player.velocity[2] = 0
         update_clock_array()
         if (@clock_array[Clock_index::Load_file] > 15)
             @walls = load_walls(@level_filename)
@@ -140,16 +175,16 @@ class MyGame < Gosu::Window
             @player.view_angle -= CAMERA_PAN_SPEED
         end
         if Gosu.button_down?(Gosu::KB_W)
-            @player.position += @view_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
+            @player.velocity += @view_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_S)
-            @player.position -= @view_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
+            @player.velocity -= @view_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_A)
-            @player.position -= @right_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
+            @player.velocity -= @right_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_D)
-            @player.position += @right_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
+            @player.velocity += @right_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
         end
         if Gosu.button_down?(Gosu::KB_SPACE) # jump
             if (@player.position[1] == @FLOOR_HEIGHT)
@@ -172,13 +207,45 @@ class MyGame < Gosu::Window
 
         # make sure player is above the floor
         if (new_position[1] < @FLOOR_HEIGHT)
-            @player.velocity = Vector.zero(3)
+            @player.velocity[1] = 0
             new_position[1] = @FLOOR_HEIGHT
         end
         # check collision with walls
         # use AABBs for broad phase
         # and line-line intersect test for narrow phase
+        # player intersect data
+        px, pz = new_position[0], new_position[2]
+        player_data = [
+            Intersect_data.new(Vector[px - PLAYER_HITBOX_SIZE/2, pz - PLAYER_HITBOX_SIZE/2], Vector[px + PLAYER_HITBOX_SIZE/2, pz - PLAYER_HITBOX_SIZE/2]),
+            Intersect_data.new(Vector[px + PLAYER_HITBOX_SIZE/2, pz - PLAYER_HITBOX_SIZE/2], Vector[px + PLAYER_HITBOX_SIZE/2, pz + PLAYER_HITBOX_SIZE/2]),
+            Intersect_data.new(Vector[px + PLAYER_HITBOX_SIZE/2, pz + PLAYER_HITBOX_SIZE/2], Vector[px - PLAYER_HITBOX_SIZE/2, pz + PLAYER_HITBOX_SIZE/2]),
+            Intersect_data.new(Vector[px - PLAYER_HITBOX_SIZE/2, pz + PLAYER_HITBOX_SIZE/2], Vector[px + PLAYER_HITBOX_SIZE/2, pz - PLAYER_HITBOX_SIZE/2])
+        ]
+        
+        # narrow phase
+        collision = false
+        @intersect_data.each do |data|
+            if collision
+                break
+            end
+            player_data.each do |pdata|
+                if collision
+                    break
+                end
+                if (pdata.intersects?(data))
+                    collision = true
+                end
+            end
+        end
+        if collision
+            new_position = Vector[@player.position[0], new_position[1], player.position[2]]
+            puts "collision"
+            puts new_position
+            puts @player.position
+            puts
+        end
         @player.position = new_position
+
     end
 
     # overriden Gosu::Window function
@@ -260,7 +327,6 @@ class MyGame < Gosu::Window
     def recalculate_render_variables
         @rotation_matrix = get_rotation_matrix(@player.view_angle)
         @reverse_rotation_matrix = get_rotation_matrix(-@player.view_angle)
-        # this is actually fucked please please please use C or python next time
         @view_vector = (@initial_view_vector.to_matrix().transpose() * @rotation_matrix).row_vectors()[0]
         @right_vector = @view_vector.cross(Vector[0, -1, 0]) # left handed i think
         @screen_plane = Plane.new(@view_vector, @view_vector)
@@ -362,8 +428,6 @@ class MyGame < Gosu::Window
         return [v1, v3, v2, v4]
     end
 end
-
-
 
 def main()
     MyGame.new.show()
