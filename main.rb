@@ -16,6 +16,7 @@ PLAYER_HITBOX_SIZE = 1.1
 FPS = 60.0
 DT = 1.0 / FPS
 
+
 class Plane
     attr_accessor :normal, :point
     def initialize(normal, point)
@@ -34,7 +35,17 @@ class Player
     attr_accessor :position, :velocity, :view_angle, :height_vector
 end
 
-Clock_array_length = 1
+class Enemy
+    attr_accessor :position, :texture, :dimensions
+    def initialize(position)
+        @position = position
+        @texture = Gosu::Image.new("sources/enemy.png")
+        @dimensions = [1.0, 1.5]
+    end
+
+end
+
+Clock_array_length = 3
 module Clock_index
     Load_file = 0
     User_click = 1
@@ -101,6 +112,9 @@ class MyGame < Gosu::Window
 
         @player = Player.new()
 
+        # random number generator
+        @rng = Random.new()
+
         # font used for drawing text
         @screen_font = Gosu::Font.new(24, {:name => "Aptos"})
         
@@ -128,6 +142,10 @@ class MyGame < Gosu::Window
         @sky_colour = Gosu::Color.new(255, 50, 20, 0)
         @wall_colour_a = Gosu::Color.new(255, 100, 100, 100)
         @wall_colour_b = Gosu::Color.new(255, 40, 40, 40)
+
+        # list of enemies
+        @enemy_count = 1
+        @enemies = []
 
         # list of vertex quads for walls, in anticlockwise order
         @level_filename = "level.txt"
@@ -160,11 +178,14 @@ class MyGame < Gosu::Window
         # set horizontal velocity to 0
         @player.velocity[0] = 0
         @player.velocity[2] = 0
+
+        # handle clock array
         update_clock_array()
         if (@clock_array[Clock_index::Load_file] > 15)
             @walls = load_walls(@level_filename)
             @clock_array[Clock_index::Load_file] = 0
         end
+
         # keyboard input handling
         movement_speed_multiplier = 1
         if Gosu.button_down?(Gosu::KB_LEFT_SHIFT)
@@ -198,7 +219,16 @@ class MyGame < Gosu::Window
         else
             @player.height_vector[1] = 1
         end
+
+        # collision checks 
         update_player_position()
+
+        # enemy logic
+        while (@enemies.length < @enemy_count)
+            position = Vector[@rng.rand(20.0) - 10.0, 0, @rng.rand(20.0) - 10.0]
+            puts(position)
+            @enemies.push(Enemy.new(position))
+        end
     end
     
     # moves player with velocity
@@ -243,7 +273,6 @@ class MyGame < Gosu::Window
             new_position = Vector[@player.position[0], new_position[1], player.position[2]]
         end
         @player.position = new_position
-
     end
 
     # overriden Gosu::Window function
@@ -251,6 +280,7 @@ class MyGame < Gosu::Window
     def draw
         recalculate_render_variables()
         draw_walls(@walls)
+        draw_enemies(@enemies)
         draw_background()
         draw_text()
     end
@@ -258,6 +288,31 @@ class MyGame < Gosu::Window
     # draw info onto screen
     def draw_text()
         @screen_font.draw_text("FPS: " + Gosu.fps().to_s(), 5, 5, 1)
+    end
+
+    def draw_enemies(enemies)
+        enemies.each do |enemy|
+            # calculate vertices (only need two)
+            v1 = enemy.position - @right_vector * enemy.dimensions[0] / 2
+            v2 = enemy.position + @right_vector * enemy.dimensions[0] / 2
+            v2[1] = enemy.dimensions[1]
+
+            # screen coordinates
+            s1 = get_screen_coordinates(v1)
+            s2 = get_screen_coordinates(v2)
+            if (s1 != nil && s2 != nil)
+                z = ((s1[2] + s2[2]) / 2.0)
+                z = 1-z
+                s1 *= RESOLUTION[0]
+                s2 *= RESOLUTION[0]
+                enemy.texture.draw_as_quad(
+                    s2[0], s2[1], Gosu::Color::WHITE,
+                    s1[0], s2[1], Gosu::Color::WHITE,
+                    s1[0], s1[1], Gosu::Color::WHITE,
+                    s2[0], s1[1], Gosu::Color::WHITE,
+                    z)
+            end
+        end
     end
 
     # draw walls to screen
@@ -272,14 +327,12 @@ class MyGame < Gosu::Window
                     nil_coordinate = true
                     break
                 end
-                screen_coordinates[i] *= RESOLUTION[0] # TODO: allow non-square screen - use aspect ratio
                 z += screen_coordinates[i][2]
+                screen_coordinates[i] *= RESOLUTION[0] # TODO: allow non-square screen - use aspect ratio
             end
             if (!nil_coordinate)
                 z /= 4.0
                 z = 1-z
-                # puts("Screen coordinates: " + screen_coordinates.to_s())
-                # TODO: store wall colour either as global value or per vertex
                 Gosu.draw_quad(
                     screen_coordinates[0][0], screen_coordinates[0][1], @wall_colour_b,
                     screen_coordinates[1][0], screen_coordinates[1][1], @wall_colour_b,
