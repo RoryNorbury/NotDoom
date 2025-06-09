@@ -8,7 +8,7 @@ require "matrix"
 PI = Math::PI
 RESOLUTION = [640, 640]
 CAMERA_PAN_SPEED = PI/2 / 60
-PLAYER_MOVEMENT_SPEED = 2.0
+PLAYER_MOVEMENT_SPEED = 4.0
 ENEMY_MOVEMENT_SPEED = 2.0
 MAX_RENDER_DISTANCE = 1024.0
 MIN_RENDER_DISTANCE = 0.0001
@@ -210,6 +210,7 @@ class MyGame < Gosu::Window
         # array for storing cycle count
         @clock_array = Array.new(Clock_array_length, 0)
         @clock_array[Clock_index::Gun_cooldown] = GUN_COOLDOWN
+        @clock_array[Clock_index::Damage_cooldown] = DAMAGE_COOLDOWN
     end
     
     def update_clock_array()
