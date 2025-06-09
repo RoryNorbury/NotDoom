@@ -19,7 +19,8 @@ GUN_SCALE = 3
 GUN_COOLDOWN = (0.2 * 60).to_i()
 GUN_ANIMATION_TIME = (0.1 * 60).to_i()
 MAX_GUN_RANGE = 100
-ENEMY_REACH = 0.3
+ENEMY_REACH = 1
+DAMAGE_COOLDOWN = 0.5 * 60
 
 FPS = 60.0
 DT = 1.0 / FPS
@@ -34,13 +35,14 @@ class Plane
 end
 
 class Player
+    attr_accessor :position, :velocity, :view_angle, :height_vector, :health
     def initialize()
         @position = Vector.zero(3)
         @velocity = Vector.zero(3)
         @view_angle = 0
         @height_vector = Vector[0, 1, 0]
+        @health = 3
     end
-    attr_accessor :position, :velocity, :view_angle, :height_vector
 end
 
 class Enemy
@@ -168,6 +170,9 @@ class MyGame < Gosu::Window
         # Pistol sprite from Doom 95. Credit: id Software, sourced from https://www.spriters-resource.com/fullview/4111/
         @gun_sprite = Gosu::Image.new("sources/gun.png")
         @gun_firing_sprite = Gosu::Image.new("sources/gun_firing.png")
+        # Health indication sprites
+        @full_heart_sprite = Gosu::Image.new("sources/full_heart.png")
+        @empty_heart_sprite = Gosu::Image.new("sources/empty_heart.png")
         
         # variables for screen coordinate calculation
         @initial_view_vector = Vector[0.0, 0.0, 1.0]
@@ -195,7 +200,7 @@ class MyGame < Gosu::Window
         @wall_colour_b = Gosu::Color.new(255, 40, 40, 40)
 
         # list of enemies
-        @enemy_count = 5
+        @enemy_count = 8
         @enemies = []
 
         # list of vertex quads for walls, in anticlockwise order
@@ -269,6 +274,7 @@ class MyGame < Gosu::Window
         if Gosu.button_down?(Gosu::KB_D)
             @player.velocity += @right_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
         end
+        # useful for t-bagging
         if Gosu.button_down?(Gosu::KB_LEFT_CONTROL)
             @player.height_vector[1] = 0.5
         else
@@ -326,17 +332,25 @@ class MyGame < Gosu::Window
         # spawn new enemy if needed
         while (@enemies.length < @enemy_count)
             position = Vector[@rng.rand(20.0) - 10.0, 0, @rng.rand(20.0) - 10.0]
-            puts(position)
             @enemies.push(Enemy.new(position))
         end
 
         i = 0
         kill_list = []
         @enemies.each do |enemy|
-            # move towards the player if they have line-of-sight
-            if (((@player.position - enemy.position).magnitude > ENEMY_MOVEMENT_SPEED) && (can_see_player(enemy)))
-                printf("Enemy %i moving\n", i)
-                enemy.position += (@player.position - enemy.position).normalize() * ENEMY_MOVEMENT_SPEED * DT
+            # if alive and can see player
+            if (!enemy.dead && (can_see_player(enemy)))
+                # move towards the player if they are out of reach
+                if ((@player.position - enemy.position).magnitude > ENEMY_REACH)
+                    printf("Enemy %i moving\n", i)
+                    enemy.position += (@player.position - enemy.position).normalize() * ENEMY_MOVEMENT_SPEED * DT
+                # attack the player if they are in range
+                else
+                    if (@clock_array[Clock_index::Damage_cooldown] > DAMAGE_COOLDOWN)
+                        @player.health -= 1
+                        @clock_array[Clock_index::Damage_cooldown] = 0
+                    end
+                end
             end
 
             # if dead, increase transparency
@@ -355,7 +369,7 @@ class MyGame < Gosu::Window
 
     def can_see_player(enemy)
         # enemy and player intersect data
-        intersect_data = Intersect_data.new(to_2d_vector(enemy.position), to_2d_vector(@player.position))
+        intersect_data = Intersect_data.new(to_2d_vector(@player.position), to_2d_vector(enemy.position))
         visible = true
         @intersect_data.each do |data|
             if (intersect_data.intersects?(data))
@@ -365,6 +379,7 @@ class MyGame < Gosu::Window
         end
         return visible
     end
+
     # moves player with velocity
     def update_player_position()
         # Physics:
@@ -376,7 +391,9 @@ class MyGame < Gosu::Window
             @player.velocity[1] = 0
             new_position[1] = @FLOOR_HEIGHT
         end
+
         # check collision with walls
+
         # use AABBs for broad phase
         # and line-line intersect test for narrow phase
         # player intersect data
@@ -403,6 +420,7 @@ class MyGame < Gosu::Window
                 end
             end
         end
+        # if colliding with wall, set x and z back to previous values
         if collision
             new_position = Vector[@player.position[0], new_position[1], player.position[2]]
         end
@@ -422,10 +440,14 @@ class MyGame < Gosu::Window
     def draw_hud()
         draw_text()
         draw_gun()
+        draw_hearts()
+        if (@clock_array[Clock_index::Damage_cooldown] < DAMAGE_COOLDOWN)
+            draw_bloody_screen()
+        end
     end
     # draw info onto screen
     def draw_text()
-        @screen_font.draw_text("FPS: " + Gosu.fps().to_s(), 5, 5, 1)
+        @screen_font.draw_text("FPS: " + Gosu.fps().to_s(), 5, 45, 1)
     end
 
     def draw_gun()
@@ -437,6 +459,24 @@ class MyGame < Gosu::Window
         x = (RESOLUTION[0] - sprite.width * GUN_SCALE) / 2
         y = RESOLUTION[1] - sprite.height * GUN_SCALE
         sprite.draw(x, y, 1, GUN_SCALE, GUN_SCALE)
+    end
+
+    def draw_hearts()
+        i = 0
+        padding = @full_heart_sprite.width * 0.1
+        while i < 3
+            if @player.health > i
+                @full_heart_sprite.draw(padding + i * (@full_heart_sprite.width + padding), padding, 1)
+            else
+                @empty_heart_sprite.draw(padding + i * (@full_heart_sprite.width + padding), padding, 1)
+            end
+            i += 1
+        end
+    end
+
+    def draw_bloody_screen
+        colour = Gosu::Color.new((1 - (@clock_array[Clock_index::Damage_cooldown] / DAMAGE_COOLDOWN)) * 255, 200, 0, 0)
+        Gosu::draw_rect(0, 0, *RESOLUTION, colour, 1)
     end
 
     # draw enemies to screen
@@ -454,7 +494,6 @@ class MyGame < Gosu::Window
                 colour = Gosu::Color.new((1-enemy.transparency)*255, 255, 255, 255)
                 z = (s1[2])
                 z = 1-z
-                z = 1
                 s1 *= RESOLUTION[0]
                 s2 *= RESOLUTION[0]
                 @enemy_sprite.draw_as_quad(
@@ -526,12 +565,10 @@ class MyGame < Gosu::Window
 
         # rotate intersect point back into screen space
         intersect_point = (intersect_point.to_matrix().transpose() * @reverse_rotation_matrix ).row_vectors()[0]
-        # puts("Intersect point: " + intersect_point.to_s())
 
         # transform into screen coordinates (z becomes depth)
         a = Vector[intersect_point[0], -intersect_point[1], z] # y axis flipped
         screen_coordinates = a + Vector[0.5, 0.5, 0.0]
-        # puts("Screen coordinates: " + screen_coordinates.to_s())
         # if z < 0 r z > 1 coordinate is outside viewing frustrum
         return screen_coordinates
     end
@@ -558,6 +595,7 @@ class MyGame < Gosu::Window
         # assuming l0 is the origin ([0, 0, 0])
 
         # WARNING: Currently entire face will not be rendered if any point is behind view plane
+        # UPDATE: Somewhat fixed this by partitioning walls into smaler sections
 
         # if p0 * l <= 0 point is behind player
         if plane.point.dot(gradient) <= 0 # possibly test is point is in reverse viewing frustrum instread? (compare to dot of screen edge)
