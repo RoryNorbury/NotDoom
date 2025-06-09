@@ -14,6 +14,11 @@ MAX_RENDER_DISTANCE = 1024.0
 MIN_RENDER_DISTANCE = 0.0001
 PLAYER_HITBOX_SIZE = 1.1
 
+GUN_SCALE = 3
+GUN_COOLDOWN = (0.2 * 60).to_i()
+GUN_ANIMATION_TIME = (0.1 * 60).to_i()
+MAX_GUN_RANGE = 100
+
 FPS = 60.0
 DT = 1.0 / FPS
 
@@ -37,20 +42,23 @@ class Player
 end
 
 class Enemy
-    attr_accessor :position, :texture, :dimensions
+    attr_accessor :position, :texture, :dimensions, :dead, :transparency
     def initialize(position)
         @position = position
-        # Baron of hell sprites from Doom 95 (public domain), sourced from https://www.spriters-resource.com/fullview/187360/
-        @texture = Gosu::Image.new("sources/baron_of_hell.png")
         @dimensions = [1.0, 1.5]
+        # used for death animation
+        @dead = false
+        @transparency = 0
     end
 end
 
-Clock_array_length = 3
+Clock_array_length = 5
 module Clock_index
     Load_file = 0
     User_click = 1
     User_keyboard = 2
+    Gun_cooldown = 3
+    Damage_cooldown = 4
 end
 
 class Intersect_data
@@ -118,6 +126,13 @@ class MyGame < Gosu::Window
 
         # font used for drawing text
         @screen_font = Gosu::Font.new(24, {:name => "Aptos"})
+
+        # sprites
+        # Baron of hell sprite from Doom 95. Credit: id Software, sourced from https://www.spriters-resource.com/fullview/187360/
+        @enemy_sprite = Gosu::Image.new("sources/baron_of_hell.png")
+        # Pistol sprite from Doom 95. Credit: id Software, sourced from https://www.spriters-resource.com/fullview/4111/
+        @gun_sprite = Gosu::Image.new("sources/gun.png")
+        @gun_firing_sprite = Gosu::Image.new("sources/gun_firing.png")
         
         # variables for screen coordinate calculation
         @initial_view_vector = Vector[0.0, 0.0, 1.0]
@@ -145,7 +160,7 @@ class MyGame < Gosu::Window
         @wall_colour_b = Gosu::Color.new(255, 40, 40, 40)
 
         # list of enemies
-        @enemy_count = 1
+        @enemy_count = 5
         @enemies = []
 
         # list of vertex quads for walls, in anticlockwise order
@@ -154,6 +169,7 @@ class MyGame < Gosu::Window
 
         # array for storing cycle count
         @clock_array = Array.new(Clock_array_length, 0)
+        @clock_array[Clock_index::Gun_cooldown] = GUN_COOLDOWN
     end
     
     def update_clock_array()
@@ -166,10 +182,18 @@ class MyGame < Gosu::Window
     # happens on key press but not key hold
     def button_down(id)
         case id
+        # reset position
         when Gosu::KB_R
             @player.position = Vector.zero(3)
+        # close
         when Gosu::KB_ESCAPE
             close()
+        # fire gun
+        when Gosu::KB_SPACE
+            if @clock_array[Clock_index::Gun_cooldown] > GUN_COOLDOWN
+                fire_gun()
+                @clock_array[Clock_index::Gun_cooldown] = 0
+            end
         end
     end
 
@@ -210,11 +234,6 @@ class MyGame < Gosu::Window
         if Gosu.button_down?(Gosu::KB_D)
             @player.velocity += @right_vector * PLAYER_MOVEMENT_SPEED * movement_speed_multiplier
         end
-        if Gosu.button_down?(Gosu::KB_SPACE) # jump
-            if (@player.position[1] == @FLOOR_HEIGHT)
-                @player.velocity += Vector[0, 1.8, 0]
-            end
-        end
         if Gosu.button_down?(Gosu::KB_LEFT_CONTROL)
             @player.height_vector[1] = 0.5
         else
@@ -228,6 +247,10 @@ class MyGame < Gosu::Window
         do_enemy_logic()
     end
     
+    def fire_gun()
+
+    end
+
     def do_enemy_logic
         # spawn new enemy if needed
         while (@enemies.length < @enemy_count)
@@ -236,12 +259,28 @@ class MyGame < Gosu::Window
             @enemies.push(Enemy.new(position))
         end
 
+        i = 0
+        kill_list = []
         @enemies.each do |enemy|
+            # move towards the player if they have line-of-sight
             if ((@player.position - enemy.position).magnitude > ENEMY_MOVEMENT_SPEED && can_see_player(enemy))
-                enemy.position += (@player.position - enemy.position).normalize * ENEMY_MOVEMENT_SPEED * DT
+                enemy.position += (@player.position - enemy.position).normalize() * ENEMY_MOVEMENT_SPEED * DT
             end
-            puts (enemy.position - @player.position).magnitude
+
+            # if dead, increase transparency
+            if enemy.dead
+                enemy.transparency += 0.05
+                if enemy.transparency == 1
+                    kill_list.push(i)
+                end
+            end
+            i += 1
         end
+        kill_list.each do |i|
+            @enemies.delete_at(i)
+        end
+
+
     end
 
     def can_see_player(enemy)
@@ -308,14 +347,30 @@ class MyGame < Gosu::Window
         draw_walls(@walls)
         draw_enemies(@enemies)
         draw_background()
-        draw_text()
+        draw_hud()
     end
 
+    def draw_hud()
+        draw_text()
+        draw_gun()
+    end
     # draw info onto screen
     def draw_text()
         @screen_font.draw_text("FPS: " + Gosu.fps().to_s(), 5, 5, 1)
     end
 
+    def draw_gun()
+        if (@clock_array[Clock_index::Gun_cooldown] < GUN_ANIMATION_TIME)
+            sprite = @gun_firing_sprite
+        else
+            sprite = @gun_sprite
+        end
+        x = (RESOLUTION[0] - sprite.width * GUN_SCALE) / 2
+        y = RESOLUTION[1] - sprite.height * GUN_SCALE
+        sprite.draw(x, y, 1, GUN_SCALE, GUN_SCALE)
+    end
+
+    # draw enemies to screen
     def draw_enemies(enemies)
         enemies.each do |enemy|
             # calculate vertices (only need two)
@@ -327,15 +382,16 @@ class MyGame < Gosu::Window
             s1 = get_screen_coordinates(v1)
             s2 = get_screen_coordinates(v2)
             if (s1 != nil && s2 != nil)
+                colour = Gosu::Color.new((1-enemy.transparency)*255, 255, 255, 255)
                 z = (s1[2])
                 z = 1-z
                 s1 *= RESOLUTION[0]
                 s2 *= RESOLUTION[0]
-                enemy.texture.draw_as_quad(
-                    s2[0], s2[1], Gosu::Color::WHITE,
-                    s1[0], s2[1], Gosu::Color::WHITE,
-                    s1[0], s1[1], Gosu::Color::WHITE,
-                    s2[0], s1[1], Gosu::Color::WHITE,
+                @enemy_sprite.draw_as_quad(
+                    s2[0], s2[1], colour,
+                    s1[0], s2[1], colour,
+                    s1[0], s1[1], colour,
+                    s2[0], s1[1], colour,
                     z)
             end
         end
@@ -448,7 +504,7 @@ class MyGame < Gosu::Window
     end
 
     # create data used for intersection tests
-    # makes ihntersect tests cheaper
+    # makes intersect tests cheaper
     def generate_intersect_data(walls)
         intersect_data = []
         walls.each do |wall|
