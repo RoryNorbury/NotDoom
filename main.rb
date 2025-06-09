@@ -9,6 +9,7 @@ PI = Math::PI
 RESOLUTION = [640, 640]
 CAMERA_PAN_SPEED = PI/2 / 60
 PLAYER_MOVEMENT_SPEED = 2.0
+ENEMY_MOVEMENT_SPEED = 2.0
 MAX_RENDER_DISTANCE = 1024.0
 MIN_RENDER_DISTANCE = 0.0001
 PLAYER_HITBOX_SIZE = 1.1
@@ -39,10 +40,10 @@ class Enemy
     attr_accessor :position, :texture, :dimensions
     def initialize(position)
         @position = position
-        @texture = Gosu::Image.new("sources/enemy.png")
+        # Baron of hell sprites from Doom 95 (public domain), sourced from https://www.spriters-resource.com/fullview/187360/
+        @texture = Gosu::Image.new("sources/baron_of_hell.png")
         @dimensions = [1.0, 1.5]
     end
-
 end
 
 Clock_array_length = 3
@@ -224,13 +225,38 @@ class MyGame < Gosu::Window
         update_player_position()
 
         # enemy logic
+        do_enemy_logic()
+    end
+    
+    def do_enemy_logic
+        # spawn new enemy if needed
         while (@enemies.length < @enemy_count)
             position = Vector[@rng.rand(20.0) - 10.0, 0, @rng.rand(20.0) - 10.0]
             puts(position)
             @enemies.push(Enemy.new(position))
         end
+
+        @enemies.each do |enemy|
+            if ((@player.position - enemy.position).magnitude > ENEMY_MOVEMENT_SPEED && can_see_player(enemy))
+                enemy.position += (@player.position - enemy.position).normalize * ENEMY_MOVEMENT_SPEED * DT
+            end
+            puts (enemy.position - @player.position).magnitude
+        end
     end
-    
+
+    def can_see_player(enemy)
+        # enemy and player intersect data
+        intersect_data = Intersect_data.new(Vector[enemy.position[0], enemy.position[2]], Vector[@player.position[0], @player.position[2]])
+        intersect = false
+        @intersect_data.each do |data|
+            if intersect
+                break
+            elsif (intersect_data.intersects?(data))
+                intersect = true
+            end
+        end
+        return !intersect
+    end
     # moves player with velocity
     def update_player_position()
         # Physics:
@@ -301,7 +327,7 @@ class MyGame < Gosu::Window
             s1 = get_screen_coordinates(v1)
             s2 = get_screen_coordinates(v2)
             if (s1 != nil && s2 != nil)
-                z = ((s1[2] + s2[2]) / 2.0)
+                z = (s1[2])
                 z = 1-z
                 s1 *= RESOLUTION[0]
                 s2 *= RESOLUTION[0]
@@ -353,6 +379,9 @@ class MyGame < Gosu::Window
         Gosu.draw_rect(0, 0, RESOLUTION[0], RESOLUTION[1]/2.0, @sky_colour, -256.0)
     end
 
+
+    # Drawing functions ---------------------------------------------------------------------------
+    
     # determine the screen coordinates that a point translates to
     def get_screen_coordinates(point)
         # puts("Point: " + point.to_s())
@@ -429,6 +458,9 @@ class MyGame < Gosu::Window
         end
         return intersect_data
     end
+
+
+    # Data loading functions ----------------------------------------------------------------------
 
     # load walls from file
     def load_walls(filename)
