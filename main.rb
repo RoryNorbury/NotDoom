@@ -1,7 +1,3 @@
-# extend gosu functions structure chart
-# 2 records
-# 1 enumeration
-
 require 'gosu'
 require "matrix"
 
