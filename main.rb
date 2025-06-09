@@ -14,10 +14,12 @@ MAX_RENDER_DISTANCE = 1024.0
 MIN_RENDER_DISTANCE = 0.0001
 PLAYER_HITBOX_SIZE = 1.1
 
+# Combat constants
 GUN_SCALE = 3
 GUN_COOLDOWN = (0.2 * 60).to_i()
 GUN_ANIMATION_TIME = (0.1 * 60).to_i()
 MAX_GUN_RANGE = 100
+ENEMY_REACH = 0.3
 
 FPS = 60.0
 DT = 1.0 / FPS
@@ -70,7 +72,6 @@ class Intersect_data
         @maxX = [p1[0], p2[0]].max
         @minY = [p1[1], p2[1]].min
         @maxY = [p1[1], p2[1]].max
-        # printf("p1: %f, %f\np2: %f, %f\nminX: %f\nminY: %f\nmaxX: %f\maxY%f\n\n", *p1, *p2, @minX, @minY)
         # Note: if line is vertical, c represents constant x value
         if (p1[0] == p2[0])
             @m = nil
@@ -109,6 +110,40 @@ class Intersect_data
             iy = @m*ix + @c
             return ((ix >= @minX) && (ix <= @maxX) && (iy >= @minY) && (iy <= @maxY) && (ix >= other.minX) && (ix <= other.maxX) && (iy >= other.minY) && (iy <= other.maxY))
         end
+    end
+    # get intersect point of two segments (nil if no intersect)
+    def intersect_point(other)
+        # line is vertical
+        if @m == nil
+            if other.m == nil
+                return nil
+            else
+                # intersect point
+                ix, iy = @c, other.m * @c + other.c
+                if ((iy >= @minY) && (iy <= @maxY) && (ix >= other.minX) && (ix <= other.maxX) && (iy >= other.minY) && (iy <= other.maxY))
+                    return Vector[ix, iy]
+                end
+            end
+        # other line is vertical
+        elsif other.m == nil
+            # intersect point
+            ix, iy = other.c, @m * other.c + @c
+            if ((iy >= other.minY) && (iy <= other.maxY) && (ix >= @minX) && (ix <= @maxX) && (iy >= @minY) && (iy <= @maxY))
+                return Vector[ix, iy]
+            end
+        # lines are the same
+        elsif (@m == other.m)
+            return nil
+        # if lines are actually normal
+        else
+            # intersect point
+            ix = (other.c - @c) / (@m - other.m)
+            iy = @m*ix + @c
+            if ((ix >= @minX) && (ix <= @maxX) && (iy >= @minY) && (iy <= @maxY) && (ix >= other.minX) && (ix <= other.maxX) && (iy >= other.minY) && (iy <= other.maxY))
+                return Vector[ix, iy]
+            end
+        end
+        return nil
     end
 end
 
@@ -248,7 +283,43 @@ class MyGame < Gosu::Window
     end
     
     def fire_gun()
-
+        # intersect_data for bullet
+        bullet_data = Intersect_data.new(to_2d_vector(@player.position), to_2d_vector(@player.position + @view_vector * MAX_GUN_RANGE))
+        # find distance to wall hit by shot
+        closest = MAX_GUN_RANGE.to_f()
+        @intersect_data.each do |data|
+            intersect_point = bullet_data.intersect_point(data)
+            if (intersect_point != nil)
+                distance = (intersect_point - to_2d_vector(@player.position)).magnitude()
+                if (distance < closest)
+                    closest = distance
+                end
+            end
+        end
+        printf("Closest wall: %.3f\n", closest)
+        # determine which enemy was hit by shot, if any
+        i = 0
+        hit_enemy = nil
+        @enemies.each do |enemy|
+            if !enemy.dead
+                data = Intersect_data.new(to_2d_vector(enemy.position - @right_vector * enemy.dimensions[0] / 2), to_2d_vector(enemy.position + @right_vector * enemy.dimensions[0] / 2))
+                intersect_point = bullet_data.intersect_point(data)
+                if (intersect_point != nil)
+                    distance = (intersect_point - to_2d_vector(@player.position)).magnitude()
+                    if (distance < closest)
+                        hit_enemy = i
+                        closest = distance
+                        printf("Enemy distance: %.3f\n", closest)
+                    end
+                end
+            end
+            i += 1
+        end
+        # flag hit enemy as dead
+        if (hit_enemy != nil)
+            printf("Hit enemy %i\n", hit_enemy)
+            @enemies[hit_enemy].dead = true
+        end
     end
 
     def do_enemy_logic
@@ -263,14 +334,15 @@ class MyGame < Gosu::Window
         kill_list = []
         @enemies.each do |enemy|
             # move towards the player if they have line-of-sight
-            if ((@player.position - enemy.position).magnitude > ENEMY_MOVEMENT_SPEED && can_see_player(enemy))
+            if (((@player.position - enemy.position).magnitude > ENEMY_MOVEMENT_SPEED) && (can_see_player(enemy)))
+                printf("Enemy %i moving\n", i)
                 enemy.position += (@player.position - enemy.position).normalize() * ENEMY_MOVEMENT_SPEED * DT
             end
 
             # if dead, increase transparency
             if enemy.dead
                 enemy.transparency += 0.05
-                if enemy.transparency == 1
+                if enemy.transparency >= 1
                     kill_list.push(i)
                 end
             end
@@ -279,22 +351,19 @@ class MyGame < Gosu::Window
         kill_list.each do |i|
             @enemies.delete_at(i)
         end
-
-
     end
 
     def can_see_player(enemy)
         # enemy and player intersect data
-        intersect_data = Intersect_data.new(Vector[enemy.position[0], enemy.position[2]], Vector[@player.position[0], @player.position[2]])
-        intersect = false
+        intersect_data = Intersect_data.new(to_2d_vector(enemy.position), to_2d_vector(@player.position))
+        visible = true
         @intersect_data.each do |data|
-            if intersect
+            if (intersect_data.intersects?(data))
+                visible = false
                 break
-            elsif (intersect_data.intersects?(data))
-                intersect = true
             end
         end
-        return !intersect
+        return visible
     end
     # moves player with velocity
     def update_player_position()
@@ -385,6 +454,7 @@ class MyGame < Gosu::Window
                 colour = Gosu::Color.new((1-enemy.transparency)*255, 255, 255, 255)
                 z = (s1[2])
                 z = 1-z
+                z = 1
                 s1 *= RESOLUTION[0]
                 s2 *= RESOLUTION[0]
                 @enemy_sprite.draw_as_quad(
@@ -508,8 +578,8 @@ class MyGame < Gosu::Window
     def generate_intersect_data(walls)
         intersect_data = []
         walls.each do |wall|
-            p1 = Vector[wall[0][0], wall[0][2]]
-            p2 = Vector[wall[1][0], wall[1][2]]
+            p1 = to_2d_vector(wall[0])
+            p2 = to_2d_vector(wall[2])
             intersect_data.push(Intersect_data.new(p1, p2))
         end
         return intersect_data
@@ -571,6 +641,11 @@ class MyGame < Gosu::Window
         v3 = Vector[v2[0], v1[1], v2[2]]
         v4 = Vector[v1[0], v2[1], v1[2]]
         return [v1, v3, v2, v4]
+    end
+
+    # get x and z components of 3d vector, useful for simple intersection tests
+    def to_2d_vector(vector)
+        return Vector[vector[0], vector[2]]
     end
 end
 
