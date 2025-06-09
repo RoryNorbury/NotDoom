@@ -21,6 +21,7 @@ GUN_ANIMATION_TIME = (0.1 * 60).to_i()
 MAX_GUN_RANGE = 100
 ENEMY_REACH = 1
 DAMAGE_COOLDOWN = 0.5 * 60
+SPAWN_SAFE_ZONE = 2
 
 FPS = 60.0
 DT = 1.0 / FPS
@@ -173,6 +174,8 @@ class MyGame < Gosu::Window
         # Health indication sprites
         @full_heart_sprite = Gosu::Image.new("sources/full_heart.png")
         @empty_heart_sprite = Gosu::Image.new("sources/empty_heart.png")
+        # screen displayed on death
+        @death_screen_sprite = Gosu::Image.new("sources/death_screen.png")
         
         # variables for screen coordinate calculation
         @initial_view_vector = Vector[0.0, 0.0, 1.0]
@@ -200,7 +203,7 @@ class MyGame < Gosu::Window
         @wall_colour_b = Gosu::Color.new(255, 40, 40, 40)
 
         # list of enemies
-        @enemy_count = 8
+        @enemy_count = 12
         @enemies = []
 
         # list of vertex quads for walls, in anticlockwise order
@@ -219,13 +222,22 @@ class MyGame < Gosu::Window
         end  
     end
 
+    def reset()
+        @player = Player.new()
+        @enemies = []
+    end
+
     # happens before update
     # happens on key press but not key hold
     def button_down(id)
+        # if dead, reset
+        if @player.health <= 0
+            reset()
+        end
         case id
-        # reset position
+        # reset game
         when Gosu::KB_R
-            @player.position = Vector.zero(3)
+            reset()
         # close
         when Gosu::KB_ESCAPE
             close()
@@ -282,11 +294,13 @@ class MyGame < Gosu::Window
             @player.height_vector[1] = 1
         end
 
-        # collision checks 
-        update_player_position()
-
-        # enemy logic
-        do_enemy_logic()
+        if (@player.health > 0)
+            # update position
+            update_player_position()
+            
+            # enemy logic
+            do_enemy_logic()
+        end
     end
     
     def fire_gun()
@@ -332,7 +346,10 @@ class MyGame < Gosu::Window
     def do_enemy_logic
         # spawn new enemy if needed
         while (@enemies.length < @enemy_count)
-            position = Vector[@rng.rand(20.0) - 10.0, 0, @rng.rand(20.0) - 10.0]
+            # ensures position is further than 3 from player
+            begin
+                position = Vector[@rng.rand(20.0) - 10.0, 0, @rng.rand(20.0) - 10.0]
+            end while (position -@player.position).magnitude < SPAWN_SAFE_ZONE
             @enemies.push(Enemy.new(position))
         end
 
@@ -439,13 +456,22 @@ class MyGame < Gosu::Window
     end
 
     def draw_hud()
-        draw_text()
-        draw_gun()
-        draw_hearts()
-        if (@clock_array[Clock_index::Damage_cooldown] < DAMAGE_COOLDOWN)
-            draw_bloody_screen()
+        if (@player.health <= 0)
+            draw_death_screen()
+        else
+            draw_text()
+            draw_gun()
+            draw_hearts()
+            if (@clock_array[Clock_index::Damage_cooldown] < DAMAGE_COOLDOWN)
+                draw_bloody_screen()
+            end
         end
     end
+
+    def draw_death_screen()
+        @death_screen_sprite.draw(0, 0, 1.1)
+    end
+
     # draw info onto screen
     def draw_text()
         @screen_font.draw_text("FPS: " + Gosu.fps().to_s(), 5, 45, 1)
